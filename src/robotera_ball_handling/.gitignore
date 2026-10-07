@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Isaac Sim & Logs
+logs/
+runs/
+*.usd
+*.usda
+*.usdc
+checkpoints/
+*.pth
+*.pt
+datasets/
+*.h5
+*.mp4

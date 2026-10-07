@@ -1,0 +1,15 @@
+[package]
+id = "robotera_ball_handling"
+version = "0.1.0"
+title = "Robotera Ball Handling"
+description = "Isaac Lab environments and tasks for Robotera humanoid robots & dexterous hands."
+authors = ["Robotera Isaac Lab Project"]
+repository = ""
+category = "Simulation"
+keywords = ["isaaclab", "robotics", "reinforcement learning", "robotera"]
+
+[dependencies]
+"omni.isaac.lab" = {}
+
+[[python.module]]
+name = "robotera_ball_handling"
