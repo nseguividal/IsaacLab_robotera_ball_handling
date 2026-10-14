@@ -1,7 +1,11 @@
 # Copyright (c) 2022-2026, Robotera Isaac Lab Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Policy playback & evaluation script for Robotera Ball Rotation task."""
+"""Script Purpose: Policy playback and evaluation script to load, run, and visualize trained RSL-RL checkpoints in the Isaac Lab environment.
+
+Usage:
+    python scripts/rsl_rl/play.py --checkpoint /path/to/model.pt
+"""
 
 import argparse
 import os

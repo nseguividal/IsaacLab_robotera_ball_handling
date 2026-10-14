@@ -22,9 +22,9 @@ from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
 VISUO_TACTILE_FINGERTIPS_CFG = TiledCameraCfg(
     prim_path="{ENV_REGEX_NS}/Robot/right_hand_.*_tip/visuo_tactile",
     offset=TiledCameraCfg.OffsetCfg(
-        # Positioned on outer contact surface of the fingertip, pointing outward
-        pos=(0.0, 0.008, 0.0),
-        rot=(0.7071, 0.7071, 0.0, 0.0),
+        # Positioned flush on the outer fingertip pad surface facing outward along +Y, Up pointing towards distal tip (-Z)
+        pos=(0.0, 0.0087, 0.008),
+        rot=(0.0, 0.7071, 0.7071, 0.0),  # Forward: +Y (outward), Up: -Z (distal tip), Left: +X (thumb)
         convention="world",
     ),
     data_types=["rgb", "distance_to_image_plane"],
@@ -32,7 +32,7 @@ VISUO_TACTILE_FINGERTIPS_CFG = TiledCameraCfg(
         focal_length=1.5,
         horizontal_aperture=3.0,
         vertical_aperture=3.0,
-        clipping_range=(0.002, 0.025),  # 2mm to 25mm contact zone
+        clipping_range=(0.0001, 0.015),  # 0.1mm to 15mm continuous tracking range
     ),
     width=32,
     height=32,
@@ -60,7 +60,7 @@ FINGERTIP_CONTACT_SENSOR_CFG = ContactSensorCfg(
 # ==============================================================================
 def compute_visuo_tactile_force_array(
     tactile_depth: torch.Tensor,
-    contact_threshold: float = 0.020,  # 20mm max contact zone threshold
+    contact_threshold: float = 0.003,  # 3mm contact zone threshold (last 3mm as elastomer gel)
     gel_stiffness: float = 80.0,       # Realistic N/m elasticity scaling
     output_taxels: tuple[int, int] = (8, 8),
     contact_forces: torch.Tensor | None = None,
@@ -82,14 +82,15 @@ def compute_visuo_tactile_force_array(
     if tactile_depth.ndim >= 3 and tactile_depth.shape[-1] == 1:
         tactile_depth = tactile_depth.squeeze(-1)
 
-    # 1. Zero out non-contact / infinite depth values where no object is in the contact zone
-    valid_contact_mask = (tactile_depth > 0.0005) & (tactile_depth < contact_threshold)
-    
-    # 2. Surface indentation: 0.0 when in open air, positive when an object compresses the pad
+    # 1. Clean non-finite values (NaN / Inf become contact_threshold -> 0.0 indentation)
+    cleaned_depth = torch.nan_to_num(tactile_depth, nan=contact_threshold, posinf=contact_threshold, neginf=0.0)
+
+    # 2. Surface indentation: Maximum when depth is ~0 (deep contact), 0.0 when depth >= contact_threshold
+    valid_contact_mask = (cleaned_depth >= 0.0) & (cleaned_depth < contact_threshold)
     raw_indentation = torch.where(
         valid_contact_mask,
-        (contact_threshold - tactile_depth),
-        torch.zeros_like(tactile_depth),
+        (contact_threshold - cleaned_depth.clamp(min=0.0)),
+        torch.zeros_like(cleaned_depth),
     )
 
     # 3. Downsample to taxel array grid (e.g. 8x8 force matrix)
@@ -104,8 +105,7 @@ def compute_visuo_tactile_force_array(
         indentation = raw_indentation
 
     # 4. Compute normal force per taxel (Newtons) from optical gel deformation
-    num_taxels = output_taxels[0] * output_taxels[1]
-    force_array = (indentation * gel_stiffness) / num_taxels
+    force_array = indentation * gel_stiffness
 
     # 5. If ground-truth physics contact force is supplied, gate and calibrate magnitude
     if contact_forces is not None:
@@ -115,13 +115,13 @@ def compute_visuo_tactile_force_array(
         c_forces = contact_forces.reshape(*batch_shape, 1, 1)
 
         in_contact = (c_forces > 0.01)
-        taxel_sum = torch.sum(force_array, dim=(-2, -1), keepdim=True)
+        taxel_max = torch.amax(force_array, dim=(-2, -1), keepdim=True)
         
-        # When physical contact sensor reports force, scale tactile distribution to match
+        # When physical contact sensor reports force, scale tactile distribution so peak square = peak contact force
         scaled_forces = torch.where(
-            taxel_sum > 1e-4,
-            force_array * (c_forces / taxel_sum.clamp(min=1e-4)),
-            torch.full_like(force_array, 1.0 / num_taxels) * c_forces,
+            taxel_max > 1e-4,
+            force_array * (c_forces / taxel_max.clamp(min=1e-4)),
+            torch.full_like(force_array, 1.0) * c_forces,
         )
         # Strictly zero out forces if physics contact is 0 (open air, no contact with target object)
         force_array = torch.where(in_contact, scaled_forces, torch.zeros_like(force_array))
@@ -131,7 +131,7 @@ def compute_visuo_tactile_force_array(
 
 def compute_visuo_tactile_contact_features(
     tactile_depth: torch.Tensor,
-    contact_threshold: float = 0.020,
+    contact_threshold: float = 0.003,
     gel_stiffness: float = 80.0,
     output_taxels: tuple[int, int] = (8, 8),
     contact_forces: torch.Tensor | None = None,
@@ -140,7 +140,7 @@ def compute_visuo_tactile_contact_features(
 
     Returns:
         force_array: (num_envs, 5, taxel_h, taxel_w)
-        total_forces: (num_envs, 5) total normal force in Newtons per finger
+        total_forces: (num_envs, 5) total normal peak force in Newtons per finger
     """
     force_array = compute_visuo_tactile_force_array(
         tactile_depth,
@@ -149,8 +149,8 @@ def compute_visuo_tactile_contact_features(
         output_taxels=output_taxels,
         contact_forces=contact_forces,
     )
-    # Sum over spatial taxel dimensions (H, W) to get total normal force per fingertip
-    total_forces = torch.sum(force_array, dim=(-2, -1))
+    # Maximum over spatial taxel dimensions (H, W) to get the total peak contact force felt by the finger
+    total_forces = torch.amax(force_array, dim=(-2, -1))
     return force_array, total_forces
 
 

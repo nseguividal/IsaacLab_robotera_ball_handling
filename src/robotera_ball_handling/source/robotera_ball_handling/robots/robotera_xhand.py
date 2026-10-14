@@ -57,8 +57,8 @@ ROBOTERA_XHAND_RIGHT_CFG = ArticulationCfg(
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=8,
-            solver_velocity_iteration_count=4,
+            solver_position_iteration_count=16,
+            solver_velocity_iteration_count=8,
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -128,8 +128,8 @@ ROBOTERA_XHAND_LEFT_CFG = ArticulationCfg(
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=8,
-            solver_velocity_iteration_count=4,
+            solver_position_iteration_count=16,
+            solver_velocity_iteration_count=8,
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(

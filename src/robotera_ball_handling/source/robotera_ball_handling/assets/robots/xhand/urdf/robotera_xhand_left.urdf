@@ -184,7 +184,7 @@
       <inertia ixx="9.35114688295086E-14" ixy="-1.32725847303435E-28" ixz="9.86076131526265E-32" iyy="3.97607820219959E-14" iyz="-1.58322857389778E-21" izz="9.35114688295086E-14" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 -0.0010 0" rpy="0 1.570796 -1.570796" />
       <geometry>
         <mesh filename="../meshes/left_hand_thumb_rota_tip.STL" />
       </geometry>
@@ -193,7 +193,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 -0.0010 0" rpy="0 1.570796 -1.570796" />
       <geometry>
         <mesh filename="../meshes/left_hand_thumb_rota_tip.STL" />
       </geometry>
@@ -338,7 +338,7 @@
       <inertia ixx="3.97607820219958E-14" ixy="2.08752389989043E-28" ixz="2.52777196678215E-29" iyy="9.35114688295087E-14" iyz="-1.79366203433577E-43" izz="9.35114688295086E-14" />
     </inertial>
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0.0008 0" rpy="0 0 0" />
       <geometry>
         <mesh filename="../meshes/left_hand_mid_tip.STL" />
       </geometry>
@@ -347,7 +347,7 @@
       </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0.0008 0" rpy="0 0 0" />
       <geometry>
         <mesh filename="../meshes/left_hand_mid_tip.STL" />
       </geometry>
@@ -543,7 +543,7 @@
     <dynamics damping="1" friction="1" />
   </joint>
   <joint name="left_hand_thumb_rota_joint3" type="fixed">
-    <origin xyz="0.0504017317642718 0 0" rpy="0 0 0" />
+    <origin xyz="0.0504017317642718 0 -0.0010" rpy="-1.570796 0 1.570796" />
     <parent link="left_hand_thumb_rota_link2" />
     <child link="left_hand_thumb_rota_tip" />
     <axis xyz="0 0 0" />
@@ -595,7 +595,7 @@
     <dynamics damping="1" friction="1" />
   </joint>
   <joint name="left_hand_mid_joint3" type="fixed">
-    <origin xyz="0 0 -0.0424999999999995" rpy="0 0 0" />
+    <origin xyz="0 -0.0008 -0.0424999999999995" rpy="0 0 0" />
     <parent link="left_hand_mid_link2" />
     <child link="left_hand_mid_tip" />
     <axis xyz="0 0 0" />

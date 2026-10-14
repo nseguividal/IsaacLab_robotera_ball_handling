@@ -245,13 +245,26 @@ class RoboteraBallRotationEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 2  # Policy runs at 30 Hz (physics at 60 Hz)
         self.episode_length_s = 15.0
 
-        # Simulation Physics Setup
+        # Simulation Physics Setup with Newton / TGS Contact Physics
         self.sim = SimulationCfg(
             dt=1.0 / 60.0,
             render_interval=self.decimation,
+            physx=sim_utils.PhysxCfg(
+                solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
+                solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for dexterous in-hand manipulation
+                min_position_iteration_count=8,
+                max_position_iteration_count=32,
+                min_velocity_iteration_count=4,
+                max_velocity_iteration_count=16,
+                enable_external_forces_every_iteration=True,
+                friction_offset_threshold=0.01,
+                friction_correlation_distance=0.005,
+            ),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=0.85,
                 dynamic_friction=0.70,
                 restitution=0.05,
+                compliant_contact_stiffness=2000.0,
+                compliant_contact_damping=50.0,
             ),
         )

@@ -1,7 +1,11 @@
 # Copyright (c) 2022-2026, Robotera Isaac Lab Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Training script for Robotera Ball Handling task with RSL-RL PPO."""
+"""Script Purpose: Reinforcement learning training script for in-hand dual-ball rotation using RSL-RL PPO with tactile and proprioceptive observations.
+
+Usage:
+    python scripts/rsl_rl/train.py --num_envs 128 --max_iterations 3000
+"""
 
 import argparse
 import os

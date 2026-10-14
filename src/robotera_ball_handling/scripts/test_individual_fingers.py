@@ -1,10 +1,7 @@
 # Copyright (c) 2022-2026, Robotera Isaac Lab Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Individual finger articulation & tactile sensor index diagnostic script.
-
-Wiggles each finger one by one to verify the exact visual motion,
-joint mappings, and contact/tactile sensor tensor index alignment.
+"""Script Purpose: Diagnostic test to articulate each finger individually to verify joint mappings, visual kinematics, and tactile tensor index alignments.
 
 Usage:
     python scripts/test_individual_fingers.py --enable_cameras
@@ -212,8 +209,8 @@ def run_finger_diagnostic(sim: sim_utils.SimulationContext, scene: InteractiveSc
                 p_val = p_forces[i].item()
                 is_active = (d_name == active_finger_name)
                 marker = "👉" if is_active else "  "
-                state = f"🟢 IN CONTACT ({f_val:.3f} N)" if f_val > 0.01 else "⚪ In Air (0.000 N)"
-                print(f" {marker} [Sensor Index {i}] {d_name:6s}: {state} | PhysX: {p_val:.3f} N")
+                state = f"🟢 IN CONTACT (Tactile: {f_val:.3f} N | Newton: {p_val:.3f} N)" if (f_val > 0.01 or p_val > 0.01) else "⚪ In Air (0.000 N)"
+                print(f" {marker} [Sensor Index {i}] {d_name:6s}: {state}")
 
             # Show ASCII tactile map for the currently active finger's sensor index
             # Find sensor index for active finger
@@ -233,10 +230,23 @@ def main():
     sim_cfg = SimulationCfg(
         dt=1.0 / 60.0,
         render_interval=1,
+        physx=sim_utils.PhysxCfg(
+            solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
+            solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for grasping
+            min_position_iteration_count=8,
+            max_position_iteration_count=32,
+            min_velocity_iteration_count=4,
+            max_velocity_iteration_count=16,
+            enable_external_forces_every_iteration=True,
+            friction_offset_threshold=0.01,
+            friction_correlation_distance=0.005,
+        ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=2.0,
             dynamic_friction=1.5,
             restitution=0.0,
+            compliant_contact_stiffness=2000.0,
+            compliant_contact_damping=50.0,
         ),
     )
     sim = sim_utils.SimulationContext(sim_cfg)
