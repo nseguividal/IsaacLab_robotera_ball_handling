@@ -164,16 +164,16 @@ def run_finger_diagnostic(sim: sim_utils.SimulationContext, scene: InteractiveSc
         active_finger_idx = (step // cycle_steps) % total_groups
         active_finger_name, active_keywords = finger_joint_groups[active_finger_idx]
 
-        # Sinusoidal motion on active finger: flex between 0.3 rad and 1.8 rad
-        flex_val = 0.75 * math.sin(step * 0.08) + 1.05
+        # Sinusoidal motion on active finger: flex between 0.0 rad (flat) and 1.85 rad (curl)
+        flex_val = 0.925 * (1.0 - math.cos(step * 0.08))
 
         cur_targets = target_pos.clone()
-        # Reset all fingers to relaxed neutral
+        # Reset all fingers to flat horizontal position (0.0 rad)
         for j_idx, j_name in enumerate(robot.data.joint_names):
             if "joint1" in j_name or "joint2" in j_name:
-                cur_targets[:, j_idx] = 0.30
+                cur_targets[:, j_idx] = 0.0
             elif "thumb" in j_name:
-                cur_targets[:, j_idx] = 0.20
+                cur_targets[:, j_idx] = 0.0
 
         # Flex ONLY the active finger
         for j_idx, j_name in enumerate(robot.data.joint_names):
