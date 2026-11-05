@@ -41,10 +41,41 @@ from robotera_ball_handling.sensors import (
 # Reusable Base Environment Assets
 # ==============================================================================
 
+def spawn_isolated_room(prim_path: str, cfg: sim_utils.UsdFileCfg, **kwargs):
+    """Spawns the Simple Room interior environment while isolating it from external world elements.
+
+    Keeps strictly:
+    - Floor & interior walls (parquet floor, wood and white panels)
+    - Ceiling light fixtures & RectLight illumination (overhead light)
+    - Table, robot hand, and manipulation objects
+
+    Deactivates:
+    - GroundPlane: Infinite physics background collision plane & collision mesh
+    - DomeLight: Exterior world sky/environment light that shows behind the walls
+    - table_low_327: Redundant low coffee table asset from Simple_Room USD
+    """
+    prim = sim_utils.spawn_from_usd(prim_path, cfg, **kwargs)
+    stage = prim.GetStage()
+    
+    # Strip physics background and exterior world elements
+    exterior_prims = [
+        "GroundPlane",    # Physics background (CollisionMesh & CollisionPlane)
+        "DomeLight",      # Infinite exterior world dome light & HDRI
+        "table_low_327",  # Redundant coffee table from simple room USD
+    ]
+    for rel_path in exterior_prims:
+        child_prim = stage.GetPrimAtPath(f"{prim_path}/{rel_path}")
+        if child_prim.IsValid():
+            child_prim.SetActive(False)
+            
+    return prim
+
+
 ROOM_CFG = AssetBaseCfg(
     prim_path="/World/Room",
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{ISAAC_NUCLEUS_DIR}/Environments/Simple_Room/simple_room.usd",
+        func=spawn_isolated_room,
     ),
 )
 
@@ -305,12 +336,6 @@ class TactileGraspTestSceneCfg(InteractiveSceneCfg):
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"]
     )
 
-    # 4 Overhead Ceiling Cameras
-    ceiling_cam_front_left: TiledCameraCfg = CEILING_CAMERA_FRONT_LEFT_CFG
-    ceiling_cam_front_right: TiledCameraCfg = CEILING_CAMERA_FRONT_RIGHT_CFG
-    ceiling_cam_rear_left: TiledCameraCfg = CEILING_CAMERA_REAR_LEFT_CFG
-    ceiling_cam_rear_right: TiledCameraCfg = CEILING_CAMERA_REAR_RIGHT_CFG
-
 
 @configclass
 class HandCameraPreviewSceneCfg(InteractiveSceneCfg):
@@ -326,9 +351,3 @@ class HandCameraPreviewSceneCfg(InteractiveSceneCfg):
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
     tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG
-
-    # 4 Overhead Ceiling Cameras
-    ceiling_cam_front_left: TiledCameraCfg = CEILING_CAMERA_FRONT_LEFT_CFG
-    ceiling_cam_front_right: TiledCameraCfg = CEILING_CAMERA_FRONT_RIGHT_CFG
-    ceiling_cam_rear_left: TiledCameraCfg = CEILING_CAMERA_REAR_LEFT_CFG
-    ceiling_cam_rear_right: TiledCameraCfg = CEILING_CAMERA_REAR_RIGHT_CFG

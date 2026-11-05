@@ -58,10 +58,10 @@ def dual_ball_state(
 def visuo_tactile_force_array_obs(
     env: ManagerBasedRLEnv,
     sensor_name: str = "tactile_cameras",
-    taxels: tuple[int, int] = (8, 8),
+    taxels: tuple[int, int] = (12, 10),
     contact_sensor_name: str | None = "contact_forces",
 ) -> torch.Tensor:
-    """Flattened 2D force array across all 5 fingertips extracted from visuo-tactile depth."""
+    """Flattened 2D force array across all 5 fingertips extracted from visuo-tactile depth (12x10 grid)."""
     tactile_sensor = env.scene[sensor_name]
     tactile_depth = tactile_sensor.data.output["distance_to_image_plane"]
 
@@ -75,11 +75,11 @@ def visuo_tactile_force_array_obs(
             tactile_depth = tactile_depth.squeeze(-1)
         tactile_depth = tactile_depth.view(env.num_envs, 5, *tactile_depth.shape[-2:])
 
-    # Compute (num_envs, 5, 8, 8) force array
+    # Compute (num_envs, 5, 12, 10) force array
     force_array = compute_visuo_tactile_force_array(
         tactile_depth, output_taxels=taxels, contact_forces=contact_forces
     )
-    # Flatten spatial taxels for policy network: (num_envs, 5 * 8 * 8 = 320)
+    # Flatten spatial taxels for policy network: (num_envs, 5 * 12 * 10 = 600)
     return force_array.view(env.num_envs, -1)
 
 

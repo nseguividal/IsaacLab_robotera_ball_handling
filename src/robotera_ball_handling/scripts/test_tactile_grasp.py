@@ -33,34 +33,36 @@ from isaaclab.sim import SimulationCfg
 
 from robotera_ball_handling.scene_config import TactileGraspTestSceneCfg
 from robotera_ball_handling.sensors import (
+    TactileSignalDynamics,
     apply_realsense_d405_noise,
     compute_visuo_tactile_contact_features,
 )
 
 
-def render_ascii_taxel_map(force_matrix_8x8: torch.Tensor, threshold: float = 0.02) -> str:
-    """Renders an 8x8 force matrix with active contact patterns and numeric values (Left: Thumb, Right: Middle, Top: Tip)."""
-    mirrored = force_matrix_8x8
+def render_ascii_taxel_map(force_matrix: torch.Tensor, threshold: float = 0.02) -> str:
+    """Renders a 12x10 force matrix with active contact patterns and numeric values (Left: Radial, Right: Ulnar, Top: Tip)."""
+    mirrored = force_matrix
     lines = []
     max_val = mirrored.max().item()
     has_contact = (max_val > 0.01)
+    num_rows, num_cols = mirrored.shape
     if not has_contact:
-        for _ in range(8):
-            lines.append("       # # # # # # # #   [  -    -    -    -    -    -    -    -  ]")
+        for _ in range(num_rows):
+            lines.append("       " + "# " * num_cols + "  [ " + "  ".join([" -  "] * num_cols) + " ]")
         return "\n".join(lines) + "\n       (Pad in open air / no contact)"
 
     # Isolate true localized contact area (above 25% of peak contact pressure)
     contact_cutoff = max(threshold, max_val * 0.25)
-    for r in range(8):
+    for r in range(num_rows):
         row_str = "       "
-        for c in range(8):
+        for c in range(num_cols):
             val = mirrored[r, c].item()
             if val > contact_cutoff:
                 row_str += "* "
             else:
                 row_str += "# "
         # Numerical forces in Newtons for each taxel in this row
-        num_str = "   [" + " ".join([f"{mirrored[r, c].item():4.2f}N" if mirrored[r, c].item() > 0.01 else "   -  " for c in range(8)]) + "]"
+        num_str = "   [" + " ".join([f"{mirrored[r, c].item():4.2f}N" if mirrored[r, c].item() > 0.01 else "   -  " for c in range(num_cols)]) + "]"
         lines.append(row_str + num_str)
     return "\n".join(lines)
 
@@ -209,19 +211,30 @@ def update_tactile_opencv_dashboard(
 
     # 1. Top Strip: 6 mini-cards (150x170 each => 6 x 150 = 900 total width)
     card_w, card_h = 150, 170
-    max_range = 0.015  # 15mm continuous visual tracking range
+    gel_thickness = 0.003  # 3mm elastomer pad thickness (elastomeric deformation range)
     cards = []
     for i, name in enumerate(finger_names):
         d_raw = depth_np[i]
-        d_clean = np.where(np.isnan(d_raw), 0.0, d_raw)
-        d_clean = np.where(np.isinf(d_clean), max_range, d_clean)
-        d_clean = np.clip(d_clean, 0.0, max_range)
-        d_i = d_clean
-
         p_val = p_forces[i].item()
         f_val = t_forces[i].item()
+        is_touching = (f_val > 0.01 or p_val > 0.01)
 
-        prox = (max_range - d_i) / max_range
+        if is_touching:
+            # Physical contact active:
+            # - nan: near-clip/penetration (< 0.1mm) is deepest indentation (0.0mm / RED)
+            # - inf: empty air / missed rays is uncompressed pad (gel_thickness -> 0.0 indentation / BLUE)
+            d_clean = np.where(np.isnan(d_raw), 0.0, d_raw)
+            d_clean = np.where(np.isinf(d_clean), gel_thickness, d_clean)
+            d_clean = np.clip(d_clean, 0.0, gel_thickness)
+            prox = (gel_thickness - d_clean) / gel_thickness
+            label = f"{name}: {f_val:.1f}N"
+        else:
+            # In open air: opaque elastomer pad is flat and undeformed (zero indentation, pure BLUE)
+            # Does NOT detect palm or other fingers through open air
+            d_clean = np.full_like(d_raw, gel_thickness)
+            prox = np.zeros_like(d_raw)
+            label = f"{name}: Air"
+
         u8 = (prox * 255.0).astype(np.uint8)
         col = cv2.applyColorMap(u8, cv2.COLORMAP_TURBO)
         col_resized = cv2.resize(col, (card_w, card_h), interpolation=cv2.INTER_NEAREST)
@@ -230,22 +243,10 @@ def update_tactile_opencv_dashboard(
         card[36:, :] = col_resized
 
         is_selected = (i == featured_idx)
-        is_touching = (f_val > 0.01 or p_val > 0.01)
-
-        if is_selected:
-            border_color = (0, 255, 255)  # Cyan border for selected
-            border_thick = 2
-        elif is_touching:
-            border_color = (0, 200, 0)
-            border_thick = 2
-        else:
-            border_color = (60, 60, 60)
-            border_thick = 1
+        border_color = (0, 255, 255) if is_selected else ((0, 200, 0) if is_touching else (60, 60, 60))
+        border_thick = 2 if (is_selected or is_touching) else 1
 
         cv2.rectangle(card, (0, 0), (card_w - 1, card_h + 35), border_color, border_thick)
-
-        min_d_mm = d_clean.min() * 1000.0
-        label = f"{name}: {f_val:.1f}N" if is_touching else f"{name}: {min_d_mm:.0f}mm"
         cv2.putText(card, label, (6, 24), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
         cards.append(card)
 
@@ -287,12 +288,26 @@ def update_tactile_opencv_dashboard(
         bot_size = 330
         safe_idx = min(featured_idx, len(finger_names) - 1)
         feat_raw = depth_np[safe_idx]
-        feat_clean = np.where(np.isnan(feat_raw), 0.0, feat_raw)
-        feat_clean = np.where(np.isinf(feat_clean), max_range, feat_clean)
-        feat_clean = np.clip(feat_clean, 0.0, max_range)
-        feat_d = feat_clean
+        idx_f = t_forces[safe_idx].item()
+        idx_p = p_forces[safe_idx].item()
+        is_touch = (idx_f > 0.01 or idx_p > 0.01)
 
-        feat_prox = (max_range - feat_d) / max_range
+        if is_touch:
+            # Physical contact active:
+            # - nan: near-clip is deepest indentation (0.0mm / RED)
+            # - inf: empty air / missed rays is uncompressed pad (gel_thickness -> 0.0 indentation / BLUE)
+            feat_clean = np.where(np.isnan(feat_raw), 0.0, feat_raw)
+            feat_clean = np.where(np.isinf(feat_clean), gel_thickness, feat_clean)
+            feat_clean = np.clip(feat_clean, 0.0, gel_thickness)
+            feat_prox = (gel_thickness - feat_clean) / gel_thickness
+            contact_pixels = feat_clean[feat_clean < gel_thickness]
+            min_dist_mm = contact_pixels.min() * 1000.0 if len(contact_pixels) > 0 else 0.0
+        else:
+            # Open air: opaque elastomer is flat and undeformed (zero indentation, pure BLUE)
+            feat_clean = np.full_like(feat_raw, gel_thickness)
+            feat_prox = np.zeros_like(feat_raw)
+            min_dist_mm = 0.0
+
         feat_col = cv2.applyColorMap((feat_prox * 255.0).astype(np.uint8), cv2.COLORMAP_TURBO)
         feat_large = cv2.resize(feat_col, (bot_size, bot_size), interpolation=cv2.INTER_NEAREST)
         cv2.rectangle(feat_large, (0, 0), (bot_size - 1, bot_size - 1), (0, 255, 255), 2)
@@ -300,50 +315,52 @@ def update_tactile_opencv_dashboard(
         taxel_np = f_array[safe_idx].detach().cpu().numpy()
         peak_force = float(taxel_np.max()) if taxel_np.size > 0 else 0.0
 
-        if peak_force > 0.01:
+        if is_touch and peak_force > 0.01:
             taxel_norm = np.clip(taxel_np / peak_force, 0.0, 1.0)
         else:
-            feat_d_8x8 = cv2.resize(feat_d, (8, 8), interpolation=cv2.INTER_AREA)
-            taxel_norm = (max_range - feat_d_8x8) / max_range
+            # Zero force in air - strictly no fake force reading from open air!
+            taxel_norm = np.zeros_like(taxel_np)
 
         taxel_col = cv2.applyColorMap((taxel_norm * 255.0).astype(np.uint8), cv2.COLORMAP_TURBO)
         taxel_large = cv2.resize(taxel_col, (bot_size, bot_size), interpolation=cv2.INTER_NEAREST)
 
-        cell_size = float(bot_size) / 8.0
-        for g in range(1, 8):
-            pos = int(g * cell_size)
-            cv2.line(taxel_large, (pos, 0), (pos, bot_size), (40, 40, 40), 1)
-            cv2.line(taxel_large, (0, pos), (bot_size, pos), (40, 40, 40), 1)
+        # Dynamic taxel grid rendering (e.g. 12 rows x 10 cols = 120 taxels)
+        num_rows, num_cols = taxel_np.shape
+        cell_w = float(bot_size) / float(num_cols)
+        cell_h = float(bot_size) / float(num_rows)
+        for r_line in range(1, num_rows):
+            pos_y = int(r_line * cell_h)
+            cv2.line(taxel_large, (0, pos_y), (bot_size, pos_y), (40, 40, 40), 1)
+        for c_line in range(1, num_cols):
+            pos_x = int(c_line * cell_w)
+            cv2.line(taxel_large, (pos_x, 0), (pos_x, bot_size), (40, 40, 40), 1)
 
-        if peak_force > 0.01:
+        if is_touch and peak_force > 0.01:
             max_r, max_c = np.unravel_index(np.argmax(taxel_np), taxel_np.shape)
-            x0 = int(max_c * cell_size)
-            y0 = int(max_r * cell_size)
-            x1 = int((max_c + 1) * cell_size)
-            y1 = int((max_r + 1) * cell_size)
+            x0 = int(max_c * cell_w)
+            y0 = int(max_r * cell_h)
+            x1 = int((max_c + 1) * cell_w)
+            y1 = int((max_r + 1) * cell_h)
             cv2.rectangle(taxel_large, (x0 + 1, y0 + 1), (x1 - 1, y1 - 1), (255, 255, 255), 2)
 
         cv2.rectangle(taxel_large, (0, 0), (bot_size - 1, bot_size - 1), (255, 150, 0), 2)
 
         info_w = total_w - (bot_size * 2)  # 900 - 660 = 240
         info_panel = np.zeros((bot_size, info_w, 3), dtype=np.uint8)
-        idx_f = t_forces[safe_idx].item()
-        idx_p = p_forces[safe_idx].item()
-        min_dist_mm = feat_clean.min() * 1000.0
 
         featured_name = finger_names[safe_idx]
         cv2.putText(info_panel, f"Finger: {featured_name}", (14, 32), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
-        cv2.putText(info_panel, f"Min Distance: {min_dist_mm:.1f} mm", (14, 70), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
+        cv2.putText(info_panel, f"Min Depth:    {min_dist_mm:.1f} mm", (14, 70), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
         cv2.putText(info_panel, f"Total Force:  {idx_f:.2f} N", (14, 110), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
 
-        is_touch = (idx_f > 0.01 or idx_p > 0.01)
-        status_text = "Touch: ACTIVE" if is_touch else "Touch: INACTIVE"
-        cv2.putText(info_panel, status_text, (14, 150), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
+        status_text = "Touch: ACTIVE (Deformed)" if is_touch else "Touch: INACTIVE (Flat Pad)"
+        status_color = (0, 255, 0) if is_touch else UI_GRAY
+        cv2.putText(info_panel, status_text, (14, 150), UI_FONT, UI_SCALE, status_color, UI_THICK)
 
-        cv2.putText(info_panel, "Colormap:", (14, 215), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
-        cv2.putText(info_panel, "[RED]  0-3mm (Contact)", (14, 242), UI_FONT, UI_SCALE, (50, 50, 255), UI_THICK)
-        cv2.putText(info_panel, "[YEL]  7mm Proximity", (14, 270), UI_FONT, UI_SCALE, (0, 255, 255), UI_THICK)
-        cv2.putText(info_panel, "[BLUE] >15mm (Air)", (14, 298), UI_FONT, UI_SCALE, (255, 120, 0), UI_THICK)
+        cv2.putText(info_panel, "Colormap (Gel Pad):", (14, 215), UI_FONT, UI_SCALE, UI_GRAY, UI_THICK)
+        cv2.putText(info_panel, "[RED]  3mm Max Indent", (14, 242), UI_FONT, UI_SCALE, (50, 50, 255), UI_THICK)
+        cv2.putText(info_panel, "[YEL]  1.5mm Indent", (14, 270), UI_FONT, UI_SCALE, (0, 255, 255), UI_THICK)
+        cv2.putText(info_panel, "[BLUE] Flat Pad / Air", (14, 298), UI_FONT, UI_SCALE, (255, 120, 0), UI_THICK)
         cv2.rectangle(info_panel, (0, 0), (info_w - 1, bot_size - 1), (80, 80, 80), 1)
 
         bottom_strip = np.hstack([feat_large, taxel_large, info_panel])
@@ -438,10 +455,24 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     print(" - Sensor Body Order mapped from PhysX:")
     for i, (b_name, d_name) in enumerate(zip(sensor_body_names, finger_names)):
         print(f"     [Sensor Index {i}] -> {d_name:6s} ('{b_name}')")
-    print(f" - Displaying 8x8 Tactile Map on Index Finger Pad (Sensor Index {index_sensor_idx})")
+    print(f" - Displaying 12x10 Tactile Map on Index Finger Pad (Sensor Index {index_sensor_idx})")
+    print(" - Sim-to-Real Active: 12x10 Grid (270° Encirclement) | Hardware Latency Queue (2 steps / ~33.3ms) | Viscoelastic Dynamics")
     print(" - Live OpenCV Visuo-Tactile HUD window launched alongside simulation")
     print(" - Press 'Space' in GUI to Pause/Play | Press Ctrl+C to exit")
     print("=" * 78 + "\n")
+
+    # Sim-to-Real Hardware Latency Queue (FIFO delay: 2 physics steps = ~33.3 ms bus latency)
+    from collections import deque
+    latency_steps = 2
+    cmd_latency_queue = deque(maxlen=latency_steps)
+
+    # Sim-to-Real Elastomeric Tactile Dynamics (Viscoelastic relaxation creep & baseline drift)
+    tactile_dynamics = TactileSignalDynamics(
+        decay_ratio=0.08,         # 8% viscoelastic stress relaxation under sustained contact
+        relaxation_time_s=2.0,    # 2.0s silicone relaxation time constant
+        drift_rate=0.003,         # Low-frequency baseline random walk drift
+        noise_std=0.004,          # High-frequency analog taxel jitter
+    )
 
     while simulation_app.is_running():
         # Drive full range grasp trajectory: oscillating from 0.0 (completely flat) to 1.0 (deep grasp)
@@ -460,7 +491,10 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             elif "bend_joint" in j_name:
                 cur_targets[:, j_idx] = 0.0                  # Neutral adduction/abduction
 
-        robot.set_joint_position_target(cur_targets)
+        # Apply Sim-to-Real Hardware Control Latency via FIFO queue
+        cmd_latency_queue.append(cur_targets)
+        delayed_targets = cmd_latency_queue[0]
+        robot.set_joint_position_target(delayed_targets)
 
         # Step physics & rendering
         scene.write_data_to_sim()
@@ -473,14 +507,17 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]
         physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)
 
-        # Convert depth & contact forces into (5, 8, 8) force array and total forces
+        # Convert depth & contact forces into (5, 12, 10) force array and total forces with viscoelastic dynamics
         force_array, total_forces = compute_visuo_tactile_contact_features(
-            tactile_depth, contact_forces=physics_contact
+            tactile_depth,
+            contact_forces=physics_contact,
+            dynamics_model=tactile_dynamics,
+            dt=sim_dt,
         )
 
         # Flatten to 1D finger forces for single env: (5,)
         t_forces = total_forces.view(-1)
-        f_array = force_array.view(5, 8, 8)
+        f_array = force_array.view(5, 12, 10)
         p_forces = physics_contact.view(-1)
 
         # Render unified multi-modal OpenCV dashboard (Tactile fingers + D405 Wrist view)
@@ -503,6 +540,7 @@ def main():
     sim_cfg = SimulationCfg(
         dt=1.0 / 60.0,
         render_interval=1,
+        device=args_cli.device if hasattr(args_cli, "device") and args_cli.device else "cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
             solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for grasping
@@ -513,6 +551,15 @@ def main():
             enable_external_forces_every_iteration=True,
             friction_offset_threshold=0.01,
             friction_correlation_distance=0.005,
+            # Compact GPU buffer allocations tailored for single-env test (prevents CUDA device OOM)
+            gpu_max_rigid_contact_count=2**16,
+            gpu_max_rigid_patch_count=2**13,
+            gpu_found_lost_pairs_capacity=2**14,
+            gpu_total_aggregate_pairs_capacity=2**13,
+            gpu_max_soft_body_contacts=2**10,
+            gpu_max_particle_contacts=2**10,
+            gpu_heap_capacity=16 * 1024 * 1024,
+            gpu_temp_buffer_capacity=4 * 1024 * 1024,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=2.0,

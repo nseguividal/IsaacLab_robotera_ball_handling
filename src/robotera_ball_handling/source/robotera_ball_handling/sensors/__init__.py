@@ -17,6 +17,7 @@ from .cameras import (
 from .tactile import (
     FINGERTIP_CONTACT_SENSOR_CFG,
     VISUO_TACTILE_FINGERTIPS_CFG,
+    TactileSignalDynamics,
     compute_visuo_tactile_contact_features,
     compute_visuo_tactile_force_array,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "render_realsense_d405_dashboard",
     "VISUO_TACTILE_FINGERTIPS_CFG",
     "FINGERTIP_CONTACT_SENSOR_CFG",
+    "TactileSignalDynamics",
     "compute_visuo_tactile_force_array",
     "compute_visuo_tactile_contact_features",
 ]

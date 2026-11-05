@@ -95,6 +95,7 @@ def main():
     sim_cfg = SimulationCfg(
         dt=1.0 / 60.0,
         render_interval=1,
+        device=args_cli.device if hasattr(args_cli, "device") and args_cli.device else "cuda:0",
         physx=sim_utils.PhysxCfg(
             solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
             solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for grasping
@@ -105,6 +106,15 @@ def main():
             enable_external_forces_every_iteration=True,
             friction_offset_threshold=0.01,
             friction_correlation_distance=0.005,
+            # Compact GPU buffer allocations tailored for single-env test (prevents CUDA device OOM)
+            gpu_max_rigid_contact_count=2**16,
+            gpu_max_rigid_patch_count=2**13,
+            gpu_found_lost_pairs_capacity=2**14,
+            gpu_total_aggregate_pairs_capacity=2**13,
+            gpu_max_soft_body_contacts=2**10,
+            gpu_max_particle_contacts=2**10,
+            gpu_heap_capacity=16 * 1024 * 1024,
+            gpu_temp_buffer_capacity=4 * 1024 * 1024,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             static_friction=0.90,

@@ -150,10 +150,10 @@ class ObservationsCfg:
             params={"sensor_cfg": SceneEntityCfg("contact_forces")},
         )
 
-        # Visuo-tactile 5-fingertip force array (optical gel deformation to force matrix)
+        # Visuo-tactile 5-fingertip force array (optical gel deformation to 12x10 force matrix, 270° encirclement)
         visuo_tactile_forces = ObsTerm(
             func=mdp.visuo_tactile_force_array_obs,
-            params={"sensor_name": "tactile_cameras", "taxels": (8, 8)},
+            params={"sensor_name": "tactile_cameras", "taxels": (12, 10)},
         )
 
         # Actions history
@@ -224,7 +224,83 @@ class TerminationsCfg:
 
 
 # ==============================================================================
-# 6. Complete Environment Configuration with Newton Physics
+# 6. Domain Randomization & Events Configuration (Sim-to-Real Item 5)
+# ==============================================================================
+@configclass
+class EventCfg:
+    """Domain randomization terms for robust sim-to-real policy transfer."""
+
+    # 1. Reset scene objects & hand joints on episode reset
+    reset_robot_joints = EventTerm(
+        func=isaac_mdp.reset_joints_by_scale,
+        mode="reset",
+        params={
+            "position_range": (0.9, 1.1),
+            "velocity_range": (0.0, 0.0),
+            "asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
+
+    # 2. Randomize Object / Ball Mass (Sim-to-Real Item 5.1: 50g nominal +/- 30% -> 35g to 65g)
+    randomize_ball1_mass = EventTerm(
+        func=isaac_mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("ball1"),
+            "mass_distribution_params": (0.035, 0.065),
+            "operation": "abs",
+        },
+    )
+    randomize_ball2_mass = EventTerm(
+        func=isaac_mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("ball2"),
+            "mass_distribution_params": (0.035, 0.065),
+            "operation": "abs",
+        },
+    )
+
+    # 3. Randomize Friction between Object and Fingers (Sim-to-Real Item 5.2)
+    randomize_ball1_material = EventTerm(
+        func=isaac_mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("ball1"),
+            "static_friction_range": (0.50, 1.20),
+            "dynamic_friction_range": (0.40, 1.00),
+            "restitution_range": (0.0, 0.08),
+            "num_buckets": 32,
+        },
+    )
+    randomize_ball2_material = EventTerm(
+        func=isaac_mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("ball2"),
+            "static_friction_range": (0.50, 1.20),
+            "dynamic_friction_range": (0.40, 1.00),
+            "restitution_range": (0.0, 0.08),
+            "num_buckets": 32,
+        },
+    )
+
+    # 4. Actuator Gain Randomization & Motor Jitter (Sim-to-Real Item 5.4: P-gain & D-gain +/- 15%)
+    randomize_actuator_gains = EventTerm(
+        func=isaac_mdp.randomize_actuator_gains,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "stiffness_distribution_params": (0.85, 1.15),
+            "damping_distribution_params": (0.85, 1.15),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
+
+
+# ==============================================================================
+# 7. Complete Environment Configuration with Newton Physics
 # ==============================================================================
 @configclass
 class RoboteraBallRotationEnvCfg(ManagerBasedRLEnvCfg):
@@ -238,6 +314,7 @@ class RoboteraBallRotationEnvCfg(ManagerBasedRLEnvCfg):
     observations: ObservationsCfg = ObservationsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
 
     def __post_init__(self):
         """Configure simulation timestep and Newton / GPU Contact Physics engine."""
