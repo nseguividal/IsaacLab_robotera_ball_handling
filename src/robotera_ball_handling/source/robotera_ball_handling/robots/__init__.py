@@ -13,6 +13,12 @@ from .robotera_xhand import (
     ROBOTERA_XHAND_RIGHT_CFG,
     ROBOTERA_XHAND_LEFT_CFG,
 )
+from .ufactory_xhand import (
+    ROBOTERA_XHAND_RIGHT_WRISTLESS_URDF,
+    UFACTORY_UF850_USD,
+    UFACTORY_UF850_XHAND_CFG,
+    spawn_ufactory_uf850_xhand,
+)
 
 __all__ = [
     "ROBOTERA_RIGHT_FINGERTIP_NAMES",
@@ -23,5 +29,9 @@ __all__ = [
     "ROBOTERA_LEFT_PALM_LINK",
     "ROBOTERA_XHAND_RIGHT_CFG",
     "ROBOTERA_XHAND_LEFT_CFG",
+    "ROBOTERA_XHAND_RIGHT_WRISTLESS_URDF",
+    "UFACTORY_UF850_USD",
+    "UFACTORY_UF850_XHAND_CFG",
+    "spawn_ufactory_uf850_xhand",
 ]
 

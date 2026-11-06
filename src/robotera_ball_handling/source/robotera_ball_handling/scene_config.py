@@ -24,13 +24,13 @@ from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
 
-from robotera_ball_handling.robots import ROBOTERA_XHAND_RIGHT_CFG
+from robotera_ball_handling.robots import (
+    ROBOTERA_XHAND_RIGHT_CFG,
+    UFACTORY_UF850_XHAND_CFG,
+)
 from robotera_ball_handling.sensors import (
-    CEILING_CAMERA_FRONT_LEFT_CFG,
-    CEILING_CAMERA_FRONT_RIGHT_CFG,
-    CEILING_CAMERA_REAR_LEFT_CFG,
-    CEILING_CAMERA_REAR_RIGHT_CFG,
     FINGERTIP_CONTACT_SENSOR_CFG,
+    REALSENSE_D405_ARM_WRIST_CFG,
     REALSENSE_D405_WRIST_CFG,
     REALSENSE_D435_OVERVIEW_CFG,
     VISUO_TACTILE_FINGERTIPS_CFG,
@@ -293,7 +293,7 @@ ROBOT_CUPOVER_PREVIEW_CFG = ROBOTERA_XHAND_RIGHT_CFG.replace(
 
 @configclass
 class RoboteraWorkspaceSceneCfg(InteractiveSceneCfg):
-    """Complete Robotera workspace scene with room, table, hand, full sensor suite, and 4 ceiling cameras."""
+    """Complete Robotera workspace scene with room, table, hand, and vision & tactile sensor suite."""
 
     # Environment & Table
     room: AssetBaseCfg = ROOM_CFG
@@ -312,12 +312,6 @@ class RoboteraWorkspaceSceneCfg(InteractiveSceneCfg):
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"]
     )
-
-    # 4 Overhead Ceiling Cameras
-    ceiling_cam_front_left: TiledCameraCfg = CEILING_CAMERA_FRONT_LEFT_CFG
-    ceiling_cam_front_right: TiledCameraCfg = CEILING_CAMERA_FRONT_RIGHT_CFG
-    ceiling_cam_rear_left: TiledCameraCfg = CEILING_CAMERA_REAR_LEFT_CFG
-    ceiling_cam_rear_right: TiledCameraCfg = CEILING_CAMERA_REAR_RIGHT_CFG
 
 
 @configclass
@@ -351,3 +345,26 @@ class HandCameraPreviewSceneCfg(InteractiveSceneCfg):
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
     tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG
+
+
+@configclass
+class UfactoryXHandSceneCfg(InteractiveSceneCfg):
+    """Standardized scene with UFactory uf850 arm mounted on table with Robotera XHand."""
+
+    room: AssetBaseCfg = ROOM_CFG
+    table: AssetBaseCfg = TABLE_CFG
+    robot: ArticulationCfg = UFACTORY_UF850_XHAND_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    ball1: RigidObjectCfg = BALL1_STATIC_CFG
+
+    # Wrist camera attached directly to arm tool flange (link6), moving with the arm
+    wrist_camera: TiledCameraCfg = REALSENSE_D405_ARM_WRIST_CFG
+    overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
+    # Tactile cameras and contact sensors mapped to the hand mounted under /Robot/xhand
+    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/Robot/xhand/.*right_hand_.*_tip/visuo_tactile"
+    )
+    contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/Robot/xhand/.*right_hand_.*_link2",
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"],
+    )
+

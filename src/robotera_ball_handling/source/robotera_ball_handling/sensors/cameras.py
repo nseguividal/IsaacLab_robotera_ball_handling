@@ -48,6 +48,36 @@ REALSENSE_D405_WRIST_CFG = TiledCameraCfg(
 
 
 # ==============================================================================
+# Intel RealSense D405 - Arm Tool Flange (link6) Wrist Mount
+# ==============================================================================
+# Mounted directly to the arm wrist tool flange (link6) on the top/dorsal bracket.
+# Moves rigidly in lockstep with the arm flange and hand palm.
+# Offset:
+# - pos=(0.0, -0.065, 0.020): 6.5cm on the dorsal side of the wrist ring, 2.0cm forward.
+# - rot=(0.9763, 0.2164, 0.0, 0.0): Tilted ~25° down around X towards the palm and fingers.
+# - convention="ros": Line of sight is +Z, right is +X, down is +Y.
+# ==============================================================================
+
+REALSENSE_D405_ARM_WRIST_CFG = TiledCameraCfg(
+    prim_path="{ENV_REGEX_NS}/Robot/link6/realsense_d405_wrist",
+    offset=TiledCameraCfg.OffsetCfg(
+        pos=(0.0, -0.065, 0.020),
+        rot=(0.9763, 0.2164, 0.0, 0.0),
+        convention="ros",
+    ),
+    data_types=["rgb", "distance_to_image_plane"],
+    spawn=sim_utils.PinholeCameraCfg(
+        focal_length=1.93,
+        horizontal_aperture=3.663,  # HFOV = 87.0°
+        vertical_aperture=2.140,    # VFOV = 58.0°
+        clipping_range=(0.07, 0.50),  # D405 ideal range: 7 cm to 50 cm
+    ),
+    width=1280,
+    height=720,
+)
+
+
+# ==============================================================================
 # Intel RealSense D435 - Overview / Tabletop Camera
 # ==============================================================================
 # The D435 is a wide-field RGB-D camera providing global scene context.
@@ -82,92 +112,7 @@ REALSENSE_D435_OVERVIEW_CFG = TiledCameraCfg(
 
 
 # ==============================================================================
-# 4 Overhead Ceiling Cameras - Multi-View Room Teleoperation & Surveillance
-# ==============================================================================
-# 4 synchronized cameras mounted on the room ceiling (Z ≈ 2.40m) overlooking
-# the workspace table at (0.20, 0.0, 0.35) from 4 distinct corner perspectives:
-# 1. Front-Left  (North-West): pos=(0.80, -0.60, 2.40)
-# 2. Front-Right (North-East): pos=(0.80,  0.60, 2.40)
-# 3. Rear-Left   (South-West): pos=(-0.40, -0.60, 2.40)
-# 4. Rear-Right  (South-East): pos=(-0.40,  0.60, 2.40)
-# Resolution: 1280 x 720 (16:9), ROS convention (+Z forward, -Y up)
-# ==============================================================================
-
-CEILING_CAMERA_FRONT_LEFT_CFG = TiledCameraCfg(
-    prim_path="{ENV_REGEX_NS}/ceiling_cam_front_left",
-    offset=TiledCameraCfg.OffsetCfg(
-        pos=(0.80, -0.60, 2.40),
-        rot=(-0.1801, 0.9062, 0.3753, -0.0746),
-        convention="ros",
-    ),
-    data_types=["rgb", "distance_to_image_plane"],
-    spawn=sim_utils.PinholeCameraCfg(
-        focal_length=2.50,
-        horizontal_aperture=3.860,
-        vertical_aperture=2.171,
-        clipping_range=(0.20, 5.00),
-    ),
-    width=1280,
-    height=720,
-)
-
-CEILING_CAMERA_FRONT_RIGHT_CFG = TiledCameraCfg(
-    prim_path="{ENV_REGEX_NS}/ceiling_cam_front_right",
-    offset=TiledCameraCfg.OffsetCfg(
-        pos=(0.80, 0.60, 2.40),
-        rot=(-0.0746, 0.3753, 0.9062, -0.1801),
-        convention="ros",
-    ),
-    data_types=["rgb", "distance_to_image_plane"],
-    spawn=sim_utils.PinholeCameraCfg(
-        focal_length=2.50,
-        horizontal_aperture=3.860,
-        vertical_aperture=2.171,
-        clipping_range=(0.20, 5.00),
-    ),
-    width=1280,
-    height=720,
-)
-
-CEILING_CAMERA_REAR_LEFT_CFG = TiledCameraCfg(
-    prim_path="{ENV_REGEX_NS}/ceiling_cam_rear_left",
-    offset=TiledCameraCfg.OffsetCfg(
-        pos=(-0.40, -0.60, 2.40),
-        rot=(-0.1801, 0.9062, -0.3753, 0.0746),
-        convention="ros",
-    ),
-    data_types=["rgb", "distance_to_image_plane"],
-    spawn=sim_utils.PinholeCameraCfg(
-        focal_length=2.50,
-        horizontal_aperture=3.860,
-        vertical_aperture=2.171,
-        clipping_range=(0.20, 5.00),
-    ),
-    width=1280,
-    height=720,
-)
-
-CEILING_CAMERA_REAR_RIGHT_CFG = TiledCameraCfg(
-    prim_path="{ENV_REGEX_NS}/ceiling_cam_rear_right",
-    offset=TiledCameraCfg.OffsetCfg(
-        pos=(-0.40, 0.60, 2.40),
-        rot=(0.0746, -0.3753, 0.9062, -0.1801),
-        convention="ros",
-    ),
-    data_types=["rgb", "distance_to_image_plane"],
-    spawn=sim_utils.PinholeCameraCfg(
-        focal_length=2.50,
-        horizontal_aperture=3.860,
-        vertical_aperture=2.171,
-        clipping_range=(0.20, 5.00),
-    ),
-    width=1280,
-    height=720,
-)
-
-
-# ==============================================================================
-# Helper Functions: Spatially Correlated Low-Frequency Noise (Technique 3)
+# NOISE MODELING: Spatially Correlated Low-Frequency Noise 
 # ==============================================================================
 
 def _generate_correlated_noise(
@@ -227,7 +172,7 @@ class RealSenseD405NoiseModel:
     DEFAULT_ENABLE_SPATIAL_FILTER: bool = False  # RealSense Edge-Preserving Spatial Filter 
     DEFAULT_OCCLUSION_SIDE: str = "left"  # "left" (matches real-world wrist D405 orientation), "right", or "both"
 
-    # Edge flicker tuning defaults (can be tuned right here at class level)
+    # Edge flicker tuning defaults (can be tuned here at class level)
     DEFAULT_DEPTH_NOISE_STD: float = 0.0030
     DEFAULT_EDGE_FLICKER_PROB: float = 0.40
     DEFAULT_EDGE_FLICKER_CLUSTER_SIZE: int = 1   # 1 = crisp single pixel noise (fine grain)

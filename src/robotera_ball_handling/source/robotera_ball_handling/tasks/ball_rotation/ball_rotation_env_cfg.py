@@ -33,7 +33,7 @@ from . import mdp
 
 
 # ==============================================================================
-# 1. Scene Configuration with Newton Contact Physics & Multi-Sensory Array
+# 1. Scene Configuration with Contact Physics & Multi-Sensory Array
 # ==============================================================================
 @configclass
 class RoboteraBallRotationSceneCfg(InteractiveSceneCfg):
