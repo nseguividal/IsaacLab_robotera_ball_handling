@@ -33,6 +33,11 @@ from robotera_ball_handling.sensors import (
     REALSENSE_D405_WRIST_CFG,
     REALSENSE_D435_OVERVIEW_CFG,
     VISUO_TACTILE_FINGERTIPS_CFG,
+    VISUO_TACTILE_INDEX_CFG,
+    VISUO_TACTILE_MID_CFG,
+    VISUO_TACTILE_PINKY_CFG,
+    VISUO_TACTILE_RING_CFG,
+    VISUO_TACTILE_THUMB_CFG,
 )
 
 
@@ -257,7 +262,14 @@ class TactileGraspTestSceneCfg(InteractiveSceneCfg):
 
     wrist_camera: TiledCameraCfg = REALSENSE_D405_WRIST_CFG
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
+
+    # Independent per-finger visuo-tactile cameras (tune each in sensors/tactile.py)
+    tactile_cam_index: TiledCameraCfg = VISUO_TACTILE_INDEX_CFG
+    tactile_cam_mid: TiledCameraCfg = VISUO_TACTILE_MID_CFG
+    tactile_cam_pinky: TiledCameraCfg = VISUO_TACTILE_PINKY_CFG
+    tactile_cam_ring: TiledCameraCfg = VISUO_TACTILE_RING_CFG
+    tactile_cam_thumb: TiledCameraCfg = VISUO_TACTILE_THUMB_CFG
+
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"]
     )
@@ -275,7 +287,14 @@ class HandCameraPreviewSceneCfg(InteractiveSceneCfg):
 
     wrist_camera: TiledCameraCfg = REALSENSE_D405_WRIST_CFG
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
+
+    # Independent per-finger visuo-tactile cameras (tune each in sensors/tactile.py)
+    tactile_cam_index: TiledCameraCfg = VISUO_TACTILE_INDEX_CFG
+    tactile_cam_mid: TiledCameraCfg = VISUO_TACTILE_MID_CFG
+    tactile_cam_pinky: TiledCameraCfg = VISUO_TACTILE_PINKY_CFG
+    tactile_cam_ring: TiledCameraCfg = VISUO_TACTILE_RING_CFG
+    tactile_cam_thumb: TiledCameraCfg = VISUO_TACTILE_THUMB_CFG
+
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG
 
 
@@ -291,10 +310,14 @@ class UfactoryXHandSceneCfg(InteractiveSceneCfg):
     # Wrist camera attached directly to arm tool flange (link6), moving with the arm
     wrist_camera: TiledCameraCfg = REALSENSE_D405_ARM_WRIST_CFG
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    # Tactile cameras and contact sensors mapped to the hand mounted under /Robot/xhand
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG.replace(
-        prim_path="{ENV_REGEX_NS}/Robot/xhand/.*right_hand_.*_tip/visuo_tactile"
-    )
+
+    # Independent per-finger visuo-tactile cameras (tune each in sensors/tactile.py)
+    tactile_cam_index: TiledCameraCfg = VISUO_TACTILE_INDEX_CFG
+    tactile_cam_mid: TiledCameraCfg = VISUO_TACTILE_MID_CFG
+    tactile_cam_pinky: TiledCameraCfg = VISUO_TACTILE_PINKY_CFG
+    tactile_cam_ring: TiledCameraCfg = VISUO_TACTILE_RING_CFG
+    tactile_cam_thumb: TiledCameraCfg = VISUO_TACTILE_THUMB_CFG
+
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
         prim_path="{ENV_REGEX_NS}/Robot/xhand/.*right_hand_.*_link2",
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"],

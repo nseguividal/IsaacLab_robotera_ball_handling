@@ -37,6 +37,7 @@ from robotera_ball_handling.sensors import (
     TactileSignalDynamics,
     apply_realsense_d405_noise,
     compute_visuo_tactile_contact_features,
+    get_tactile_depth_tensor,
 )
 
 # Takes the long URDF link name and turns it into a short label (for UI)
@@ -134,7 +135,7 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
         step += 1
 
         # Process tactile sensors
-        tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]     #reads fingertip depth (rendering a depth image where each pixel is the distance from camera/fingertip sensor plane to object)
+        tactile_depth = get_tactile_depth_tensor(scene)     # reads fingertip depth across all 5 fingers in PhysX order
         physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)     # reads contact forces and we turn the Fx, Fy, Fz into a single force magnitude
 
         force_array, total_forces = compute_visuo_tactile_contact_features(

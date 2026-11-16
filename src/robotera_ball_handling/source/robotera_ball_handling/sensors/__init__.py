@@ -14,9 +14,15 @@ from .cameras import (
 from .tactile import (
     FINGERTIP_CONTACT_SENSOR_CFG,
     VISUO_TACTILE_FINGERTIPS_CFG,
+    VISUO_TACTILE_INDEX_CFG,
+    VISUO_TACTILE_MID_CFG,
+    VISUO_TACTILE_PINKY_CFG,
+    VISUO_TACTILE_RING_CFG,
+    VISUO_TACTILE_THUMB_CFG,
     TactileSignalDynamics,
     compute_visuo_tactile_contact_features,
     compute_visuo_tactile_force_array,
+    get_tactile_depth_tensor,
 )
 
 __all__ = [
@@ -27,8 +33,14 @@ __all__ = [
     "apply_realsense_d405_noise",
     "render_realsense_d405_dashboard",
     "VISUO_TACTILE_FINGERTIPS_CFG",
+    "VISUO_TACTILE_INDEX_CFG",
+    "VISUO_TACTILE_MID_CFG",
+    "VISUO_TACTILE_PINKY_CFG",
+    "VISUO_TACTILE_RING_CFG",
+    "VISUO_TACTILE_THUMB_CFG",
     "FINGERTIP_CONTACT_SENSOR_CFG",
     "TactileSignalDynamics",
     "compute_visuo_tactile_force_array",
     "compute_visuo_tactile_contact_features",
+    "get_tactile_depth_tensor",
 ]

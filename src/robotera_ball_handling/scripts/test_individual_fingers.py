@@ -34,7 +34,13 @@ from robotera_ball_handling.sensors import (
     REALSENSE_D405_WRIST_CFG,
     REALSENSE_D435_OVERVIEW_CFG,
     VISUO_TACTILE_FINGERTIPS_CFG,
+    VISUO_TACTILE_INDEX_CFG,
+    VISUO_TACTILE_MID_CFG,
+    VISUO_TACTILE_PINKY_CFG,
+    VISUO_TACTILE_RING_CFG,
+    VISUO_TACTILE_THUMB_CFG,
     compute_visuo_tactile_contact_features,
+    get_tactile_depth_tensor,
 )
 
 
@@ -88,7 +94,11 @@ class IndividualFingerSceneCfg(InteractiveSceneCfg):
     # Multi-Modal Sensors
     wrist_camera: TiledCameraCfg = REALSENSE_D405_WRIST_CFG
     overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
+    tactile_cam_index: TiledCameraCfg = VISUO_TACTILE_INDEX_CFG
+    tactile_cam_mid: TiledCameraCfg = VISUO_TACTILE_MID_CFG
+    tactile_cam_pinky: TiledCameraCfg = VISUO_TACTILE_PINKY_CFG
+    tactile_cam_ring: TiledCameraCfg = VISUO_TACTILE_RING_CFG
+    tactile_cam_thumb: TiledCameraCfg = VISUO_TACTILE_THUMB_CFG
     contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"]
     )
@@ -175,7 +185,7 @@ def run_finger_diagnostic(sim: sim_utils.SimulationContext, scene: InteractiveSc
 
         step += 1
         if step % 30 == 0:
-            tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]
+            tactile_depth = get_tactile_depth_tensor(scene)
             physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)
 
             force_array, total_forces = compute_visuo_tactile_contact_features(
