@@ -13,7 +13,6 @@ Usage in any test script or training workflow:
     from robotera_ball_handling.scene_config import (
         TactileGraspTestSceneCfg,
         HandCameraPreviewSceneCfg,
-        RoboteraWorkspaceSceneCfg,
     )
 """
 
@@ -38,7 +37,7 @@ from robotera_ball_handling.sensors import (
 
 
 # ==============================================================================
-# Reusable Base Environment Assets
+# Base Environment Assets
 # ==============================================================================
 
 def spawn_isolated_room(prim_path: str, cfg: sim_utils.UsdFileCfg, **kwargs):
@@ -128,51 +127,7 @@ BALL1_STATIC_CFG = RigidObjectCfg(
     ),
 )
 
-BALL1_DYNAMIC_CFG = RigidObjectCfg(
-    prim_path="{ENV_REGEX_NS}/Ball1",
-    spawn=sim_utils.SphereCfg(
-        radius=0.024,
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=False,
-            max_depenetration_velocity=5.0,
-        ),
-        mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
-        collision_props=sim_utils.CollisionPropertiesCfg(),
-        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.15, 0.15), roughness=0.8),
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=2.0,
-            dynamic_friction=1.5,
-            restitution=0.0,
-        ),
-    ),
-    init_state=RigidObjectCfg.InitialStateCfg(
-        pos=(0.18, -0.02, 0.418),
-    ),
-)
-
-BALL2_DYNAMIC_CFG = RigidObjectCfg(
-    prim_path="{ENV_REGEX_NS}/Ball2",
-    spawn=sim_utils.SphereCfg(
-        radius=0.024,
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=False,
-            max_depenetration_velocity=5.0,
-        ),
-        mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
-        collision_props=sim_utils.CollisionPropertiesCfg(),
-        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.15, 0.75, 0.95), roughness=0.8),
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=2.0,
-            dynamic_friction=1.5,
-            restitution=0.0,
-        ),
-    ),
-    init_state=RigidObjectCfg.InitialStateCfg(
-        pos=(0.18, 0.03, 0.418),
-    ),
-)
-
-# Ball 1 & 2 for Cupped Palm Cradle Preview
+# Ball 1 & 2 for Catching it with a cradled hand
 BALL1_CRADLE_CFG = RigidObjectCfg(
     prim_path="{ENV_REGEX_NS}/Ball1",
     spawn=sim_utils.SphereCfg(
@@ -222,7 +177,7 @@ BALL2_CRADLE_CFG = RigidObjectCfg(
 # Robot Hand Posture & Actuator Presets
 # ==============================================================================
 
-# 1. Flat hand initialization with high finger stiffness (for dynamic grasp tests)
+# Flat hand initialization with high finger stiffness (for dynamic grasp tests)
 ROBOT_TACTILE_GRASP_CFG = ROBOTERA_XHAND_RIGHT_CFG.replace(
     prim_path="{ENV_REGEX_NS}/Robot",
     init_state=ROBOTERA_XHAND_RIGHT_CFG.init_state.replace(
@@ -258,7 +213,7 @@ ROBOT_TACTILE_GRASP_CFG = ROBOTERA_XHAND_RIGHT_CFG.replace(
     },
 )
 
-# 2. Cupped/curled finger initialization (for visual camera verification)
+# Cupped/curled finger initialization 
 ROBOT_CUPOVER_PREVIEW_CFG = ROBOTERA_XHAND_RIGHT_CFG.replace(
     prim_path="{ENV_REGEX_NS}/Robot",
     init_state=ROBOTERA_XHAND_RIGHT_CFG.init_state.replace(
@@ -290,29 +245,6 @@ ROBOT_CUPOVER_PREVIEW_CFG = ROBOTERA_XHAND_RIGHT_CFG.replace(
 # ==============================================================================
 # Standardized Interactive Scene Configurations
 # ==============================================================================
-
-@configclass
-class RoboteraWorkspaceSceneCfg(InteractiveSceneCfg):
-    """Complete Robotera workspace scene with room, table, hand, and vision & tactile sensor suite."""
-
-    # Environment & Table
-    room: AssetBaseCfg = ROOM_CFG
-    table: AssetBaseCfg = TABLE_CFG
-
-    # Dexterous Hand
-    robot: ArticulationCfg = ROBOT_TACTILE_GRASP_CFG
-
-    # Manipulation Targets
-    ball1: RigidObjectCfg = BALL1_STATIC_CFG
-
-    # Sensor Suite: Wrist, Tabletop, Tactile
-    wrist_camera: TiledCameraCfg = REALSENSE_D405_WRIST_CFG
-    overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
-    contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG.replace(
-        filter_prim_paths_expr=["{ENV_REGEX_NS}/Ball1"]
-    )
-
 
 @configclass
 class TactileGraspTestSceneCfg(InteractiveSceneCfg):

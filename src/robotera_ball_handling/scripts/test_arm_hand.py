@@ -39,7 +39,7 @@ from robotera_ball_handling.sensors import (
     compute_visuo_tactile_contact_features,
 )
 
-
+# Takes the long URDF link name and turns it into a short label (for UI)
 def get_clean_finger_name(body_name: str) -> str:
     """Extract clean display name from body name."""
     b_lower = body_name.lower()
@@ -74,23 +74,25 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
     for idx, j_name in enumerate(robot.data.joint_names):
         category = "ARM" if ("joint" in j_name and not "hand" in j_name) else "FINGER"
         print(f"     [{idx:02d}] {j_name:30s} -> [{category}]")
-    print(" - Press 'Space' in GUI to Pause/Play | Press Ctrl+C to exit")
+    print(" - Press Ctrl+C to exit")
     print("=" * 80 + "\n")
 
     # Hardware Latency Queue (2 physics steps = ~33.3 ms bus latency)
     latency_steps = 2
-    cmd_latency_queue = deque(maxlen=latency_steps)
+    cmd_latency_queue = deque(maxlen=latency_steps)         #if queue is full it will feed the robot the command of 1 step ago (dropping anything older)
 
-    # Viscoelastic Tactile Dynamics
+    # Viscoelastic Tactile values
     tactile_dynamics = TactileSignalDynamics(
-        decay_ratio=0.08,
-        relaxation_time_s=2.0,
-        drift_rate=0.003,
-        noise_std=0.004,
+        decay_ratio=0.08,               # stress relaxation strength --> so that the measured force sags slightly over time when object presses the object
+        relaxation_time_s=2.0,          # how fast the sag happens (in sec)
+        drift_rate=0.003,               #simulates drift so readings slowly deviate a bit over time
+        noise_std=0.004,                # sensor jitter --> adds small px gaussian noise every step (in N)
     )
 
     while simulation_app.is_running():
         # Drive coordinated arm reach + finger grasp motion
+
+        # We generate the motion targets (move with a oscillation from -1.0 tp 1.0 multiplied by a weight)
         t = step * 0.02
         alpha_arm = math.sin(t)
         alpha_hand = 0.50 * (1.0 - math.cos(t * 1.5))
@@ -98,7 +100,8 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
         cur_targets = target_pos.clone()
 
         for j_idx, j_name in enumerate(robot.data.joint_names):
-            # Arm Joint Control: gentle reaching oscillation over the table
+            # Arm Joint Control: gentle reaching oscillation over the table 
+            # hardcoded arm joint angles
             if j_name == "joint1":
                 cur_targets[:, j_idx] = 0.0 + alpha_arm * 0.20   # Yaw sway: +/- 0.2 rad
             elif j_name == "joint2":
@@ -107,7 +110,8 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
                 cur_targets[:, j_idx] = -0.70 - alpha_arm * 0.15 # Elbow reach (limits: [-4.224, 0.061])
             elif j_name == "joint5":
                 cur_targets[:, j_idx] = -0.35 - alpha_arm * 0.10 # Keep wrist level
-            # Hand Finger Control: gentle grasp and release
+            # Hand Finger Control: gentle grasp and release 
+            # hardcoded finger angles
             elif "thumb_bend" in j_name:
                 cur_targets[:, j_idx] = 0.40 + alpha_hand * 0.30
             elif "thumb_rota" in j_name:
@@ -118,11 +122,11 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
                 cur_targets[:, j_idx] = 0.50 + alpha_hand * 0.80
 
         # Apply hardware command latency
-        cmd_latency_queue.append(cur_targets)
-        delayed_targets = cmd_latency_queue[0]
+        cmd_latency_queue.append(cur_targets)           # each step we push new command to the back 
+        delayed_targets = cmd_latency_queue[0]          # sending oldest command (from the front) to the robot
         robot.set_joint_position_target(delayed_targets)
 
-        # Step physics & rendering
+        # Step physics & rendering --> advances simulation one step
         scene.write_data_to_sim()
         sim.step()
         scene.update(sim_dt)
@@ -130,8 +134,8 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
         step += 1
 
         # Process tactile sensors
-        tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]
-        physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)
+        tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]     #reads fingertip depth (rendering a depth image where each pixel is the distance from camera/fingertip sensor plane to object)
+        physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)     # reads contact forces and we turn the Fx, Fy, Fz into a single force magnitude
 
         force_array, total_forces = compute_visuo_tactile_contact_features(
             tactile_depth,
@@ -140,6 +144,7 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
             dt=sim_dt,
         )
 
+        #print status every 60 steps (1s at 60Hz)
         if step % 60 == 0:
             wrist_info = ""
             if hasattr(args_cli, "enable_cameras") and args_cli.enable_cameras:
@@ -148,7 +153,7 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
                     wrist_info = f" | D405 Wrist Cam: {tuple(wrist_rgb_t.shape[1:])}"
             print(f"[Step {step:05d}] Arm Reach alpha: {alpha_arm:+.2f} | Max Finger Force: {total_forces.max().item():.2f} N{wrist_info}")
 
-        # RealSense D405 Wrist Camera (mounted to link6 tool flange)
+        # show RealSense D405 Wrist Camera (mounted to link6 tool flange)
         if hasattr(args_cli, "enable_cameras") and args_cli.enable_cameras:
             wrist_rgb_t = scene["wrist_camera"].data.output.get("rgb", None)
             if wrist_rgb_t is not None and len(wrist_rgb_t) > 0:
@@ -157,10 +162,6 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
                     wrist_bgr = cv2.cvtColor(wrist_rgb, cv2.COLOR_RGBA2BGR)
                 else:
                     wrist_bgr = cv2.cvtColor(wrist_rgb, cv2.COLOR_RGB2BGR)
-                
-                # Periodically save snapshot to disk
-                if step % 300 == 0:
-                    cv2.imwrite("/tmp/d405_wrist_snapshot.jpg", wrist_bgr)
 
                 # Try showing OpenCV window (safely ignores if OpenCV is headless/no GUI backend)
                 try:
@@ -182,35 +183,9 @@ def run_arm_hand_test(sim: sim_utils.SimulationContext, scene: InteractiveScene)
 
 def main():
     sim_cfg = SimulationCfg(
-        dt=1.0 / 60.0,
+        dt=1.0 / 60.0,              # sets 60Hz physics (rendered every step)
         render_interval=1,
         device=args_cli.device if hasattr(args_cli, "device") and args_cli.device else "cuda:0",
-        physx=sim_utils.PhysxCfg(
-            solver_type=1,
-            solve_articulation_contact_last=True,
-            min_position_iteration_count=8,
-            max_position_iteration_count=32,
-            min_velocity_iteration_count=4,
-            max_velocity_iteration_count=16,
-            enable_external_forces_every_iteration=True,
-            friction_offset_threshold=0.01,
-            friction_correlation_distance=0.005,
-            gpu_max_rigid_contact_count=2**16,
-            gpu_max_rigid_patch_count=2**13,
-            gpu_found_lost_pairs_capacity=2**14,
-            gpu_total_aggregate_pairs_capacity=2**13,
-            gpu_max_soft_body_contacts=2**10,
-            gpu_max_particle_contacts=2**10,
-            gpu_heap_capacity=16 * 1024 * 1024,
-            gpu_temp_buffer_capacity=4 * 1024 * 1024,
-        ),
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=2.0,
-            dynamic_friction=1.5,
-            restitution=0.0,
-            compliant_contact_stiffness=2000.0,
-            compliant_contact_damping=50.0,
-        ),
     )
     sim = sim_utils.SimulationContext(sim_cfg)
     # Camera looking at arm mounted on the table

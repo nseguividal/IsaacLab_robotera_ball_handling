@@ -38,35 +38,7 @@ from robotera_ball_handling.sensors import (
     compute_visuo_tactile_contact_features,
 )
 
-
-def render_ascii_taxel_map(force_matrix: torch.Tensor, threshold: float = 0.02) -> str:
-    """Renders a 12x10 force matrix with active contact patterns and numeric values (Left: Radial, Right: Ulnar, Top: Tip)."""
-    mirrored = force_matrix
-    lines = []
-    max_val = mirrored.max().item()
-    has_contact = (max_val > 0.01)
-    num_rows, num_cols = mirrored.shape
-    if not has_contact:
-        for _ in range(num_rows):
-            lines.append("       " + "# " * num_cols + "  [ " + "  ".join([" -  "] * num_cols) + " ]")
-        return "\n".join(lines) + "\n       (Pad in open air / no contact)"
-
-    # Isolate true localized contact area (above 25% of peak contact pressure)
-    contact_cutoff = max(threshold, max_val * 0.25)
-    for r in range(num_rows):
-        row_str = "       "
-        for c in range(num_cols):
-            val = mirrored[r, c].item()
-            if val > contact_cutoff:
-                row_str += "* "
-            else:
-                row_str += "# "
-        # Numerical forces in Newtons for each taxel in this row
-        num_str = "   [" + " ".join([f"{mirrored[r, c].item():4.2f}N" if mirrored[r, c].item() > 0.01 else "   -  " for c in range(num_cols)]) + "]"
-        lines.append(row_str + num_str)
-    return "\n".join(lines)
-
-
+# safe check to see if IsaacSim GUI library is available or not (then it will run headless)
 try:
     import omni.ui as ui
     OMNI_UI_AVAILABLE = True
@@ -74,6 +46,7 @@ except ImportError:
     OMNI_UI_AVAILABLE = False
 
 
+## ------ UI visuotactile sensor window configuration --------
 SELECTED_FINGER_IDX = None
 GLOBAL_TACTILE_HUD = None
 OPENCV_MOUSE_SETUP = False
@@ -151,17 +124,20 @@ def update_tactile_opencv_dashboard(
     wrist_depth: torch.Tensor | None = None,
 ):
     """Renders a real-time HUD with dynamic finger and D405 wrist camera selection."""
+
+    # Initialize the tactilesensor UI & pick which finger to show
     global GLOBAL_TACTILE_HUD, SELECTED_FINGER_IDX, OPENCV_MOUSE_SETUP
     if GLOBAL_TACTILE_HUD is None and OMNI_UI_AVAILABLE:
         GLOBAL_TACTILE_HUD = OmniverseTactileHUD(finger_names)
 
-    # Default to Thumb if not yet selected
+    # Default to Thumb if nothing yet selected
     if SELECTED_FINGER_IDX is None or SELECTED_FINGER_IDX > 5:
         SELECTED_FINGER_IDX = finger_names.index("Thumb") if "Thumb" in finger_names else index_sensor_idx
 
     featured_idx = SELECTED_FINGER_IDX
 
-    # Squeeze depth to (5, H, W)
+    # Prepare sensor images
+    # Squeeze depth -> normalizing depth tensor into a plain (5, H, W) NumPy array
     d_tensor = tactile_depth
     if d_tensor.ndim == 4 and d_tensor.shape[-1] == 1:
         d_tensor = d_tensor.squeeze(-1)
@@ -194,7 +170,7 @@ def update_tactile_opencv_dashboard(
             w_d = w_d.squeeze(-1)
         w_d_np = w_d.detach().cpu().numpy().astype(np.float32)
 
-        valid_mask = (w_d_np >= 0.07) & (w_d_np <= 0.50)
+        valid_mask = (w_d_np >= 0.07) & (w_d_np <= 0.50)        # only depth from 7cm to 50cm (camera range)
         d405_lock_pct = float(valid_mask.mean()) * 100.0
 
         d_clamped = np.clip(w_d_np, 0.07, 0.30)
@@ -209,7 +185,7 @@ def update_tactile_opencv_dashboard(
     UI_THICK = 1
     UI_GRAY = (180, 180, 180)
 
-    # 1. Top Strip: 6 mini-cards (150x170 each => 6 x 150 = 900 total width)
+    # Top Strip: 6 mini-cards (150x170 each => 6 x 150 = 900 total width)
     card_w, card_h = 150, 170
     gel_thickness = 0.003  # 3mm elastomer pad thickness (elastomeric deformation range)
     cards = []
@@ -266,7 +242,7 @@ def update_tactile_opencv_dashboard(
     total_w = top_strip.shape[1]  # 6 * 150 = 900
     bot_h = 330
 
-    # 2. Bottom Area: Either D405 Wrist View (RGB + Depth) OR Tactile Finger View
+    # Bottom Area: Either D405 Wrist View (RGB + Depth) OR Tactile Finger View
     if featured_idx == 5 and d405_bgr is not None and d405_col is not None:
         # D405 Dual View (450x330 RGB + 450x330 Depth = 900x330)
         panel_w = 450
@@ -276,10 +252,9 @@ def update_tactile_opencv_dashboard(
 
         depth_panel = cv2.resize(d405_col, (panel_w, bot_h), interpolation=cv2.INTER_NEAREST)
         flicker_str = "ON" if RealSenseD405NoiseModel.DEFAULT_ENABLE_EDGE_FLICKER else "OFF"
-        voronoi_str = "ON" if RealSenseD405NoiseModel.DEFAULT_ENABLE_VORONOI_DROPOUT else "OFF"
         contrast_str = "ON" if RealSenseD405NoiseModel.DEFAULT_ENABLE_LOW_CONTRAST else "OFF"
         occl_str = "ON" if RealSenseD405NoiseModel.DEFAULT_ENABLE_STEREO_OCCLUSION else "OFF"
-        cv2.putText(depth_panel, f"D405: Noise:{flicker_str} | Voronoi:{voronoi_str} | Contrast:{contrast_str} | Occl:{occl_str}", (12, 26), UI_FONT, 0.35, (0, 255, 255), 1)
+        cv2.putText(depth_panel, f"D405: Noise:{flicker_str} | Contrast:{contrast_str} | Occl:{occl_str}", (12, 26), UI_FONT, 0.35, (0, 255, 255), 1)
         cv2.putText(depth_panel, "[Turbo] 7cm (Blue) -> 30cm (Red) | Black: RealSense Dropout", (12, bot_h - 14), UI_FONT, 0.38, (200, 200, 200), 1)
 
         bottom_strip = np.hstack([rgb_panel, depth_panel])
@@ -367,11 +342,11 @@ def update_tactile_opencv_dashboard(
 
     dashboard = np.vstack([top_strip, bottom_strip])
 
-    # 1. Update native Omniverse UI window
+    # Update native Omniverse UI window
     if GLOBAL_TACTILE_HUD is not None:
         GLOBAL_TACTILE_HUD.update(dashboard)
 
-    # 2. Try OpenCV window with click callback and keybindings
+    # Try OpenCV window with click callback and keybindings
     try:
         cv2.imshow(WINDOW_NAME, dashboard)
         if not OPENCV_MOUSE_SETUP:
@@ -418,7 +393,7 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     robot: Articulation = scene["robot"]
     step = 0
 
-    # Sensor body names in PhysX (alphabetical order in USD: Index, Middle, Pinky, Ring, Thumb)
+    # reading sensor finger names in PhysX (alphabetical order in USD: Index, Middle, Pinky, Ring, Thumb)
     sensor_body_names = scene["contact_forces"].body_names
     finger_names = [get_clean_finger_name(b) for b in sensor_body_names]
     index_sensor_idx = finger_names.index("Index") if "Index" in finger_names else 0
@@ -475,7 +450,7 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     )
 
     while simulation_app.is_running():
-        # Drive full range grasp trajectory: oscillating from 0.0 (completely flat) to 1.0 (deep grasp)
+        # HARDCODED Drive full range grasp trajectory: oscillating from 0.0 (completely flat) to 1.0 (deep grasp)
         alpha = 0.50 * (1.0 - math.cos(step * 0.025))
         cur_targets = target_pos.clone()
         for j_idx in range(len(robot.data.joint_names)):
@@ -504,8 +479,8 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         step += 1
 
         # Process tactile sensors every frame
-        tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]
-        physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)
+        tactile_depth = scene["tactile_cameras"].data.output["distance_to_image_plane"]     #reads fingertip depth (rendering a depth image where each pixel is the distance from camera/fingertip sensor plane to object)
+        physics_contact = torch.norm(scene["contact_forces"].data.net_forces_w, dim=-1)     # reads contact forces and we turn the Fx, Fy, Fz into a single force magnitude
 
         # Convert depth & contact forces into (5, 12, 10) force array and total forces with viscoelastic dynamics
         force_array, total_forces = compute_visuo_tactile_contact_features(
@@ -520,7 +495,7 @@ def run_grasp_test(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         f_array = force_array.view(5, 12, 10)
         p_forces = physics_contact.view(-1)
 
-        # Render unified multi-modal OpenCV dashboard (Tactile fingers + D405 Wrist view)
+        # UI: Render unified multi-modal OpenCV dashboard (Tactile fingers + D405 Wrist view)
         wrist_rgb = scene["wrist_camera"].data.output["rgb"]
         wrist_depth = scene["wrist_camera"].data.output["distance_to_image_plane"]
         update_tactile_opencv_dashboard(
@@ -541,33 +516,6 @@ def main():
         dt=1.0 / 60.0,
         render_interval=1,
         device=args_cli.device if hasattr(args_cli, "device") and args_cli.device else "cuda:0",
-        physx=sim_utils.PhysxCfg(
-            solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
-            solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for grasping
-            min_position_iteration_count=8,
-            max_position_iteration_count=32,
-            min_velocity_iteration_count=4,
-            max_velocity_iteration_count=16,
-            enable_external_forces_every_iteration=True,
-            friction_offset_threshold=0.01,
-            friction_correlation_distance=0.005,
-            # Compact GPU buffer allocations tailored for single-env test (prevents CUDA device OOM)
-            gpu_max_rigid_contact_count=2**16,
-            gpu_max_rigid_patch_count=2**13,
-            gpu_found_lost_pairs_capacity=2**14,
-            gpu_total_aggregate_pairs_capacity=2**13,
-            gpu_max_soft_body_contacts=2**10,
-            gpu_max_particle_contacts=2**10,
-            gpu_heap_capacity=16 * 1024 * 1024,
-            gpu_temp_buffer_capacity=4 * 1024 * 1024,
-        ),
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            static_friction=2.0,
-            dynamic_friction=1.5,
-            restitution=0.0,
-            compliant_contact_stiffness=2000.0,
-            compliant_contact_damping=50.0,
-        ),
     )
     sim = sim_utils.SimulationContext(sim_cfg)
     sim.set_camera_view(eye=[0.35, 0.28, 0.58], target=[0.08, 0.0, 0.42])

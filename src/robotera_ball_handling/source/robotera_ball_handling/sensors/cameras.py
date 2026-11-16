@@ -15,8 +15,7 @@ from isaaclab.sensors import TiledCameraCfg
 # ==============================================================================
 # Intel RealSense D405 - Wrist-Mounted Sub-Millimeter Macro Camera
 # ==============================================================================
-# The D405 is Intel's sub-millimeter close-range RGB-D camera designed for
-# robotic wrists and high-precision dexterous in-hand manipulation.
+# Camera fixed in world space at (0.06,0.0,0.50) overlooking the hand (for when we have no arm)
 # Official RealSense D405 Datasheet Specs:
 # - RGB Frame Resolution: 1280 x 720 (at 30 fps, up to 90 fps)
 # - Depth Output Resolution: Up to 1280 x 720 (up to 90 fps)
@@ -33,7 +32,7 @@ REALSENSE_D405_WRIST_CFG = TiledCameraCfg(
         pos=(0.06, 0.0, 0.5),
         # Set so that the UI displays exactly (0.627, 0.326, -0.326, -0.627)
         rot=(0.95372, 0.0, 0.30070, 0.0),
-        convention="world",
+        convention="world",             # moves with the position offset, which can change in sim
     ),
     data_types=["rgb", "distance_to_image_plane"],
     spawn=sim_utils.PinholeCameraCfg(
@@ -63,7 +62,7 @@ REALSENSE_D405_ARM_WRIST_CFG = TiledCameraCfg(
     offset=TiledCameraCfg.OffsetCfg(
         pos=(0.0, -0.065, 0.020),
         rot=(0.9763, 0.2164, 0.0, 0.0),
-        convention="ros",
+        convention="ros",           #ros means connected to the world space
     ),
     data_types=["rgb", "distance_to_image_plane"],
     spawn=sim_utils.PinholeCameraCfg(
@@ -80,7 +79,7 @@ REALSENSE_D405_ARM_WRIST_CFG = TiledCameraCfg(
 # ==============================================================================
 # Intel RealSense D435 - Overview / Tabletop Camera
 # ==============================================================================
-# The D435 is a wide-field RGB-D camera providing global scene context.
+# Camera used for overview of the scene, so placed like in the eyes of the human (aprox. position, can be tunned for future projects)
 # Official RealSense D435 Datasheet Specs:
 # - Depth Output Resolution: Up to 1280 x 720 (up to 90 fps)
 # - RGB Frame Resolution: Up to 1280 x 800 (1280 x 720 at 60 fps)
@@ -115,6 +114,9 @@ REALSENSE_D435_OVERVIEW_CFG = TiledCameraCfg(
 # NOISE MODELING: Spatially Correlated Low-Frequency Noise 
 # ==============================================================================
 
+# Math functions to generate smooth random noise (instead of random pixels, we sample smaller clusters of noise using interpolation and produce a continuous smooth surface)
+
+# Applied directly to depth values (adds / substracts mm) 
 def _generate_correlated_noise(
     shape: tuple[int, ...],
     cluster_size: int,
@@ -130,7 +132,7 @@ def _generate_correlated_noise(
     smooth = F.interpolate(low_res, size=(h, w), mode="bilinear", align_corners=False)
     return smooth / (smooth.std() + 1e-6)
 
-
+# Creates the probabilities (0-1) for making random Yes/No decision
 def _generate_correlated_uniform(
     shape: tuple[int, ...],
     cluster_size: int,
@@ -167,36 +169,34 @@ class RealSenseD405NoiseModel:
     DEFAULT_ENABLE_LOW_CONTRAST: bool = True
     DEFAULT_CONTRAST_THRESHOLD: float = 0.0013  # Sobel gradient cutoff: regions with gradient < threshold drop to 0.0 (black) // close to 0.0 = ideal behaviour
     DEFAULT_ENABLE_STEREO_OCCLUSION: bool = True
-    DEFAULT_ENABLE_VORONOI_DROPOUT: bool = False
     DEFAULT_ENABLE_EDGE_FLICKER: bool = True                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-    DEFAULT_ENABLE_SPATIAL_FILTER: bool = False  # RealSense Edge-Preserving Spatial Filter 
-    DEFAULT_OCCLUSION_SIDE: str = "left"  # "left" (matches real-world wrist D405 orientation), "right", or "both"
+    DEFAULT_ENABLE_SPATIAL_FILTER: bool = False  # To smooth out surfaces that are close (not very good yet)
+    DEFAULT_OCCLUSION_SIDE: str = "left"  # "left" (matches the D405 orientation), "right", or "both"
 
     # Edge flicker tuning defaults (can be tuned here at class level)
-    DEFAULT_DEPTH_NOISE_STD: float = 0.0030
-    DEFAULT_EDGE_FLICKER_PROB: float = 0.40
-    DEFAULT_EDGE_FLICKER_CLUSTER_SIZE: int = 1   # 1 = crisp single pixel noise (fine grain)
-    DEFAULT_EDGE_HALO_RADIUS: int = 5            # Halo boundary reach in pixels
-    DEFAULT_EDGE_FLICKER_DEPTH_OFFSET: float = 0.015
+    DEFAULT_DEPTH_NOISE_STD: float = 0.0030             # jitter strength --> defines surface depth fluctuates by around +-3mm
+    DEFAULT_EDGE_FLICKER_PROB: float = 0.40             # probability on how often edge flickers (in this case 40% of pixels around finger silhouettes flicker)
+    DEFAULT_EDGE_FLICKER_CLUSTER_SIZE: int = 1          # grain size of noise --> 1 = single pixel noise / 4 = bigger noise patches
+    DEFAULT_EDGE_HALO_RADIUS: int = 5                   # width of the blurry edge boundary (in pixels) -> how far out from the actual pixel the glitch zone reaches
+    DEFAULT_EDGE_FLICKER_DEPTH_OFFSET: float = 0.015    # the depth of the edge glitches -> when pixels glitch around the edge of a finger, we push them 1.5cm deeper than the finger surface 
 
     # Spatial filter tuning defaults
-    DEFAULT_SPATIAL_FILTER_RADIUS: int = 4
-    DEFAULT_SPATIAL_DELTA_THRESHOLD: float = 0.040
-    DEFAULT_ENABLE_SPATIAL_HOLE_FILLING: bool = True
-    DEFAULT_SPATIAL_HOLE_FILL_RADIUS: int = 14
-    DEFAULT_SPATIAL_HOLE_FILL_OFFSET: float = 0.030
+    DEFAULT_SPATIAL_FILTER_RADIUS: int = 2              # smoothing blur radius -> filter looks at 2px in all directions to average out noise (to make smoother surfaces)
+    DEFAULT_SPATIAL_DELTA_THRESHOLD: float = 0.040      # when filter must stop smoothing so it doesn't blur object edges into the background (if 2 adjacent px differ >4cm  in depth we don't smooth that point)
+    DEFAULT_ENABLE_SPATIAL_HOLE_FILLING: bool = True    # if true it detects the missing pixels (0-depth) and fills them with interpolated depth
+    DEFAULT_SPATIAL_HOLE_FILL_RADIUS: int = 14          # maximum hole size to fix (if gap is <14px it fills them in, if its >14 it leaves them with 0-depth)
+    DEFAULT_SPATIAL_HOLE_FILL_OFFSET: float = 0.030     # depth of the filled gap -> when filter fills a missing gap it sets the depth of that gap 3cm deeper than the actual interpolated finger value
 
     def __init__(
         self,
         baseline_m: float = 0.018,
         min_depth: float = 0.07,
-        max_depth: float = 0.30,
+        max_depth: float = 0.50,
         subpixel_levels: int = 32,
-        contrast_threshold: float | None = None,     # Between: 0.00 (no low-contrast dropouts) to ~0.50 (drops even sharp edges)
+        contrast_threshold: float | None = None,     
         noise_std_at_50cm: float = 0.010,
         # --- Sim-to-Real Filter Activation Flags ---
         enable_low_contrast: bool | None = None,
-        enable_voronoi_dropout: bool | None = None,
         enable_edge_flicker: bool | None = None,
         enable_spatial_filter: bool | None = None,
         enable_stereo_occlusion: bool | None = None,
@@ -213,11 +213,6 @@ class RealSenseD405NoiseModel:
         enable_spatial_hole_filling: bool | None = None,
         spatial_hole_fill_radius: int | None = None,
         spatial_hole_fill_offset: float | None = None,
-        # --- Voronoi Cellular Low-Contrast Dropout Parameters ---
-        voronoi_cell_size: int = 80,
-        voronoi_spot_radius: float = 20.0,
-        voronoi_density: float = 0.05,
-        voronoi_contrast_threshold: float = 0.001,
         # --- Additional Features 
         enable_flying_pixels: bool = False,
         enable_specular_dropout: bool = False,
@@ -232,9 +227,6 @@ class RealSenseD405NoiseModel:
         self.noise_std_at_50cm = noise_std_at_50cm
         self.enable_low_contrast = (
             self.DEFAULT_ENABLE_LOW_CONTRAST if enable_low_contrast is None else enable_low_contrast
-        )
-        self.enable_voronoi_dropout = (
-            self.DEFAULT_ENABLE_VORONOI_DROPOUT if enable_voronoi_dropout is None else enable_voronoi_dropout
         )
         self.enable_edge_flicker = (
             self.DEFAULT_ENABLE_EDGE_FLICKER if enable_edge_flicker is None else enable_edge_flicker
@@ -282,10 +274,6 @@ class RealSenseD405NoiseModel:
         self.spatial_hole_fill_offset = (
             self.DEFAULT_SPATIAL_HOLE_FILL_OFFSET if spatial_hole_fill_offset is None else spatial_hole_fill_offset
         )
-        self.voronoi_cell_size = voronoi_cell_size
-        self.voronoi_spot_radius = voronoi_spot_radius
-        self.voronoi_density = voronoi_density
-        self.voronoi_contrast_threshold = voronoi_contrast_threshold
         self.enable_flying_pixels = enable_flying_pixels
         self.enable_specular_dropout = enable_specular_dropout
 
@@ -356,17 +344,18 @@ class RealSenseD405NoiseModel:
         # On real RealSense D405, objects farther than 50cm (0.50m) or closer
         # than 7cm (0.07m) have zero disparity and output 0.0 (appear black).
         # We apply this FIRST so the background (>50cm) becomes empty space (0.0).
-        range_invalid = (d > 0.50) | (d < self.min_depth)
+        range_invalid = (d > self.max_depth) | (d < self.min_depth)
         noisy_d[range_invalid] = 0.0
 
         # ----------------------------------------------------------------------
         # 2. LOW-CONTRAST Dropout (Sobel Gradient on Luminance)
         # ----------------------------------------------------------------------
         local_contrast = None
-        if self.enable_low_contrast or self.enable_voronoi_dropout:
+        if self.enable_low_contrast:
             grad_x = F.conv2d(gray, sobel_x, padding=1)
             grad_y = F.conv2d(gray, sobel_y, padding=1)
             grad_mag = torch.sqrt(grad_x ** 2 + grad_y ** 2)
+            # gradient has a good contrast if its immediate patch has texture (diff contrast)
             local_contrast = F.max_pool2d(grad_mag, kernel_size=5, stride=1, padding=2)
 
         if self.enable_low_contrast and local_contrast is not None:
@@ -375,80 +364,17 @@ class RealSenseD405NoiseModel:
             noisy_d[low_contrast_dropout] = 0.0
 
         # ----------------------------------------------------------------------
-        # 2b. Voronoi / Cellular Low-Contrast Dropout (Spotty 0-depth holes)
-        # ----------------------------------------------------------------------
-        # Simulates real-world stereo camera behavior on smooth/low-texture surfaces:
-        # Instead of dropping out the entire surface into a solid black void, stereo
-        # matching fails in an organic Voronoi distribution of discrete black
-        # patches/holes (0 depth), leaving islands of valid depth between them.
-        if self.enable_voronoi_dropout and local_contrast is not None:
-            low_contrast_region = (local_contrast < self.voronoi_contrast_threshold) & (noisy_d > 0.0)
-
-            # Generate 2D Voronoi cellular grid
-            S = self.voronoi_cell_size
-            H, W = noisy_d.shape[-2], noisy_d.shape[-1]
-            B = noisy_d.shape[0] if noisy_d.ndim >= 3 else 1
-            gh = (H + S - 1) // S + 2
-            gw = (W + S - 1) // S + 2
-
-            # Random seed jitter within each grid cell
-            jitter_x = torch.rand((gh, gw), device=device)
-            jitter_y = torch.rand((gh, gw), device=device)
-            grid_c = torch.arange(gw, device=device).view(1, gw).float()
-            grid_r = torch.arange(gh, device=device).view(gh, 1).float()
-            seed_x = (grid_c + jitter_x) * S
-            seed_y = (grid_r + jitter_y) * S
-
-            # Randomly decide which cells drop out
-            cell_active = (torch.rand((gh, gw), device=device) < self.voronoi_density)
-
-            # Pixel coordinate grids
-            y_coords = torch.arange(H, device=device).view(H, 1).float()
-            x_coords = torch.arange(W, device=device).view(1, W).float()
-            cy = (y_coords / S).long() + 1
-            cx = (x_coords / S).long() + 1
-
-            min_d2 = torch.full((H, W), 1e9, device=device)
-            active_at_min = torch.zeros((H, W), dtype=torch.bool, device=device)
-
-            # Check 9 neighboring Voronoi cells
-            for dy in (-1, 0, 1):
-                ny = torch.clamp(cy + dy, 0, gh - 1)
-                for dx in (-1, 0, 1):
-                    nx = torch.clamp(cx + dx, 0, gw - 1)
-                    sx = seed_x[ny, nx]
-                    sy = seed_y[ny, nx]
-                    act = cell_active[ny, nx]
-
-                    d2 = (x_coords - sx) ** 2 + (y_coords - sy) ** 2
-                    is_closer = d2 < min_d2
-                    min_d2 = torch.where(is_closer, d2, min_d2)
-                    active_at_min = torch.where(is_closer, act, active_at_min)
-
-            # In low-contrast regions, drop out pixels within the Voronoi spot radius
-            min_dist = torch.sqrt(min_d2).view(1, 1, H, W).expand(B, 1, H, W)
-            active_mask = active_at_min.view(1, 1, H, W).expand(B, 1, H, W)
-
-            # Scale spot radius dynamically based on contrast deficit (lower contrast = larger holes)
-            contrast_norm = torch.clamp(local_contrast / self.voronoi_contrast_threshold, 0.0, 1.0)
-            effective_radius = self.voronoi_spot_radius * (1.5 - 0.5 * contrast_norm)
-
-            voronoi_holes = low_contrast_region & active_mask & (min_dist < effective_radius)
-            noisy_d[voronoi_holes] = 0.0
-
-        # ----------------------------------------------------------------------
         # 3. Stereo Parallax Occlusion Shadows (Baseline Blind Spot Gaps)
         # ----------------------------------------------------------------------
         # In stereo vision, foreground objects block the secondary camera from seeing
         # background surfaces immediately adjacent to the foreground silhouette.
-        # - "left": Occlusion shadow falls on the LEFT of foreground silhouettes
-        #           (matches real-world wrist D405 orientation / secondary lens on the left).
+        # - "left": Occlusion shadow falls on the LEFT of foreground silhouettes.
         # - "right": Occlusion shadow falls on the RIGHT of foreground silhouettes.
         # - "both": Bilateral occlusion gaps.
         if self.enable_stereo_occlusion:
-            valid_surf = (noisy_d >= self.min_depth) & (noisy_d <= 0.50)
+            valid_surf = (noisy_d >= self.min_depth) & (noisy_d <= self.max_depth)
             w_img = noisy_d.shape[-1]
-            k_occ = max(4, min(32, int(0.045 * w_img)))
+            k_occ = max(4, min(32, int(0.045 * w_img)))   # for a 1280px image, the k_occ wopuld be 32px
 
             z_left = noisy_d[:, :, :, :-1]
             z_right = noisy_d[:, :, :, 1:]
@@ -459,17 +385,20 @@ class RealSenseD405NoiseModel:
 
             # --- Left-side Occlusion (Secondary lens to the left / camera inverted) ---
             if self.occlusion_side in ["left", "both"]:
-                # Step from deeper background on the left to foreground on the right
-                step_to_fg_right = val_left & val_right & ((z_left - z_right) > 0.015)
+                # check adjacent horizontal pixels for a depth jump
+                step_to_fg_right = val_left & val_right & ((z_left - z_right) > 0.015)  # jump is valid if there is more than 15mm change in z
                 # Foreground left boundary (at column of z_right)
                 step_edge_left = F.pad(step_to_fg_right, (1, 0, 0, 0), value=False)
+                # defining the shadow search zone (we want the shadow to extend k_occ pixels to the left of the finger)
                 # Pad k_occ on right so 1D horizontal pooling propagates shadow leftward
                 padded_step_l = F.pad(step_edge_left.float(), (0, k_occ, 0, 0), value=0.0)
                 cand_l = F.max_pool2d(padded_step_l, kernel_size=(1, k_occ + 1), stride=1) > 0.5
+                # finding the finger's edge depth
                 fg_edge_z_l = torch.where(step_edge_left, noisy_d, torch.full_like(noisy_d, 999.0))
                 padded_fg_l = F.pad(fg_edge_z_l, (0, k_occ, 0, 0), value=999.0)
                 dilated_fg_l = -F.max_pool2d(-padded_fg_l, kernel_size=(1, k_occ + 1), stride=1)
-                occ_l = cand_l & valid_surf & (noisy_d > (dilated_fg_l + 0.010))
+                # applying the shadow occlusion 
+                occ_l = cand_l & valid_surf & (noisy_d > (dilated_fg_l + 0.010))    # a px is shadowed if: is within horizontal blind-spot + is in a valid surface + its at lkleast 10mm deeper than the finger
                 occlusion_mask = occlusion_mask | occ_l
 
             # --- Right-side Occlusion (Secondary lens to the right) ---
@@ -491,10 +420,9 @@ class RealSenseD405NoiseModel:
             noisy_d = torch.where(occlusion_mask, torch.zeros_like(noisy_d), noisy_d)
 
         # ----------------------------------------------------------------------
-        # 4. Solid Surface Depth Noise & Boundary Edge Flickering (Technique 3)
+        # 4. Solid Surface Depth Noise & Boundary Edge Flickering 
         # ----------------------------------------------------------------------
-        # Applied AFTER the 50cm range filter so that boundary edge flickering
-        # and noisy flying pixels can bleed into the surrounding empty space / background.
+        # Applied AFTER the max_depth range filter so that boundary edge flickering and noisy flying pixels can bleed into the surrounding empty space / background.
         # Simulates real-world D405 characteristics:
         # a) Surface noise: Spatially correlated low-frequency axial noise across
         #    the finger and ball surfaces so they have natural smooth waviness.
@@ -518,7 +446,7 @@ class RealSenseD405NoiseModel:
             edge_jitter = _generate_correlated_noise(noisy_d.shape, self.edge_flicker_cluster_size, device) * 0.010
             noisy_d = torch.where(step_edges, noisy_d + edge_jitter, noisy_d)
 
-            # 4c. Silhouette halo: expand valid foreground mask into adjacent empty/background pixels
+            # 4c. Edge Silhouette halo: expand valid foreground mask into adjacent empty/background pixels
             # A wider kernel (e.g. 15px) allows the halo to bridge across narrow inter-finger spaces
             k_halo = max(3, self.edge_halo_radius if self.edge_halo_radius % 2 == 1 else self.edge_halo_radius + 1)
             pad_halo = k_halo // 2
@@ -542,11 +470,10 @@ class RealSenseD405NoiseModel:
             noisy_d = torch.where(flicker_active, halo_depth, noisy_d)
 
         # ----------------------------------------------------------------------
-        # 5. RealSense 2D Edge-Preserving Spatial Filter (Technique 4)
+        # 5. RealSense 2D Edge-Preserving Spatial Filter 
         # ----------------------------------------------------------------------
         # Simulates the RealSense SDK onboard IIR spatial filter:
-        # Smooths surface noise and edge flickering into continuous, organic surfaces
-        # while preserving sharp boundaries across large depth jumps (> delta_threshold).
+        # Smooths surface noise and edge flickering into continuous, organic surfaces while preserving sharp boundaries across large depth jumps (> delta_threshold).
         if self.enable_spatial_filter:
             noisy_d = self.apply_spatial_filter(
                 noisy_d,
@@ -558,21 +485,6 @@ class RealSenseD405NoiseModel:
                 hole_fill_radius=self.spatial_hole_fill_radius,
                 hole_fill_depth_offset=self.spatial_hole_fill_offset,
             )
-
-        # ======================================================================
-        # [COMMENTED OUT FOR STEP-BY-STEP TESTING]
-        # ======================================================================
-        # # 6. Specular Glare Saturation Dropout
-        # if self.enable_specular_dropout:
-        #     specular_dropout = (gray > 0.96) & (grad_mag < 0.02)
-        #
-        # # 7. Disparity Calculation & Sub-Pixel Discretization
-        # safe_d = torch.clamp(d, min=0.01)
-        # disp = fb / safe_d
-        # if self.subpixel_levels > 0:
-        #     disp_quant = torch.round(disp * self.subpixel_levels) / self.subpixel_levels
-        #     noisy_d = fb / torch.clamp(disp_quant, min=1e-3)
-        # ======================================================================
 
         res = noisy_d.view(orig_shape)
         return res
@@ -616,7 +528,7 @@ class RealSenseD405NoiseModel:
         working_valid = valid_4d.clone()
 
         # ----------------------------------------------------------------------
-        # A. Inter-Finger Morphological Gap Bridging & Hole Filling
+        # Inter-Finger Morphological Gap Bridging & Hole Filling
         # ----------------------------------------------------------------------
         # Simulates RealSense SDK spatial filter hole-filling between adjacent fingers:
         # Closes narrow gaps between fingers and fills them with slightly deeper depth (+offset),
@@ -642,9 +554,9 @@ class RealSenseD405NoiseModel:
             working_valid = working_valid | gap_mask
 
         # ----------------------------------------------------------------------
-        # B. RealSense Separable Edge-Preserving Smoothing Pass
+        # RealSense Separable Edge-Preserving Smoothing Pass
         # ----------------------------------------------------------------------
-        # 1. Horizontal Pass
+        # Horizontal Pass
         weights_sum_h = torch.zeros_like(working_d)
         depth_sum_h = torch.zeros_like(working_d)
         pad_h = F.pad(working_d, (radius, radius, 0, 0), mode="replicate")
@@ -663,7 +575,7 @@ class RealSenseD405NoiseModel:
 
         d_h = torch.where(weights_sum_h > 1e-4, depth_sum_h / weights_sum_h, working_d)
 
-        # 2. Vertical Pass
+        # Vertical Pass
         weights_sum_v = torch.zeros_like(d_h)
         depth_sum_v = torch.zeros_like(d_h)
         valid_h = (d_h >= min_depth) & (d_h <= max_depth)
@@ -695,7 +607,6 @@ def apply_realsense_d405_noise(
     rgb: torch.Tensor,
     depth: torch.Tensor,
     enable_low_contrast: bool | None = None,
-    enable_voronoi_dropout: bool | None = None,
     enable_edge_flicker: bool | None = None,
     enable_spatial_filter: bool | None = None,
     enable_stereo_occlusion: bool | None = None,
@@ -711,10 +622,6 @@ def apply_realsense_d405_noise(
     enable_spatial_hole_filling: bool | None = None,
     spatial_hole_fill_radius: int | None = None,
     spatial_hole_fill_offset: float | None = None,
-    voronoi_cell_size: int = 20,
-    voronoi_spot_radius: float = 7.0,
-    voronoi_density: float = 0.60,
-    voronoi_contrast_threshold: float = 0.008,
     min_depth: float = 0.07,
     max_depth: float = 0.30,
 ) -> torch.Tensor:
@@ -723,7 +630,6 @@ def apply_realsense_d405_noise(
         min_depth=min_depth,
         max_depth=max_depth,
         enable_low_contrast=enable_low_contrast,
-        enable_voronoi_dropout=enable_voronoi_dropout,
         enable_edge_flicker=enable_edge_flicker,
         enable_spatial_filter=enable_spatial_filter,
         enable_stereo_occlusion=enable_stereo_occlusion,
@@ -739,10 +645,6 @@ def apply_realsense_d405_noise(
         enable_spatial_hole_filling=enable_spatial_hole_filling,
         spatial_hole_fill_radius=spatial_hole_fill_radius,
         spatial_hole_fill_offset=spatial_hole_fill_offset,
-        voronoi_cell_size=voronoi_cell_size,
-        voronoi_spot_radius=voronoi_spot_radius,
-        voronoi_density=voronoi_density,
-        voronoi_contrast_threshold=voronoi_contrast_threshold,
     )
     return model(rgb, depth)
 
@@ -754,7 +656,6 @@ def render_realsense_d405_dashboard(
     apply_noise: bool = True,
     enable_low_contrast: bool | None = None,
     contrast_threshold: float | None = None,
-    enable_voronoi_dropout: bool | None = None,
     enable_edge_flicker: bool | None = None,
     enable_spatial_filter: bool | None = None,
     enable_stereo_occlusion: bool | None = None,
@@ -771,7 +672,6 @@ def render_realsense_d405_dashboard(
         apply_noise: If True, applies the realistic RealSenseD405NoiseModel before visualization.
         enable_low_contrast: Flag to toggle Step 2 full low-contrast dropout filter (None uses DEFAULT_ENABLE_LOW_CONTRAST).
         contrast_threshold: Sobel gradient threshold for low-contrast dropout (None uses DEFAULT_CONTRAST_THRESHOLD).
-        enable_voronoi_dropout: Flag to toggle Step 2b Voronoi cellular dropout filter (None uses DEFAULT_ENABLE_VORONOI_DROPOUT).
         enable_edge_flicker: Flag to toggle Step 4 surface depth noise and edge flickering (None uses DEFAULT_ENABLE_EDGE_FLICKER).
         enable_spatial_filter: Flag to toggle Step 5 RealSense edge-preserving spatial filter (None uses DEFAULT_ENABLE_SPATIAL_FILTER).
         enable_stereo_occlusion: Flag to toggle Step 3 stereo parallax occlusion shadows (None uses DEFAULT_ENABLE_STEREO_OCCLUSION).
@@ -782,14 +682,13 @@ def render_realsense_d405_dashboard(
     Returns:
         Composed BGR dashboard image as a numpy uint8 array of shape (view_height + 38, view_width * 2, 3).
     """
-    # 1. Apply physical D405 noise & dropout if requested
+    # 1. Apply physical D405 noise & dropout 
     if apply_noise:
         noisy_d = apply_realsense_d405_noise(
             rgb,
             depth,
             enable_low_contrast=enable_low_contrast,
             contrast_threshold=contrast_threshold,
-            enable_voronoi_dropout=enable_voronoi_dropout,
             enable_edge_flicker=enable_edge_flicker,
             enable_spatial_filter=enable_spatial_filter,
             enable_stereo_occlusion=enable_stereo_occlusion,
@@ -852,11 +751,6 @@ def render_realsense_d405_dashboard(
         if enable_spatial_filter is None
         else enable_spatial_filter
     )
-    eff_voronoi = (
-        RealSenseD405NoiseModel.DEFAULT_ENABLE_VORONOI_DROPOUT
-        if enable_voronoi_dropout is None
-        else enable_voronoi_dropout
-    )
     eff_contrast = (
         RealSenseD405NoiseModel.DEFAULT_ENABLE_LOW_CONTRAST
         if enable_low_contrast is None
@@ -873,7 +767,7 @@ def render_realsense_d405_dashboard(
         else enable_stereo_occlusion
     )
     contrast_tag = f"ON(th={eff_contrast_th:g})" if eff_contrast else "OFF"
-    status_str = f"Noise: {'ON' if eff_flicker else 'OFF'} | Spat: {'ON' if eff_spatial else 'OFF'} | Voronoi: {'ON' if eff_voronoi else 'OFF'} | Contrast: {contrast_tag} | Occl: {'ON' if eff_occlusion else 'OFF'}"
+    status_str = f"Noise: {'ON' if eff_flicker else 'OFF'} | Spat: {'ON' if eff_spatial else 'OFF'} | Contrast: {contrast_tag} | Occl: {'ON' if eff_occlusion else 'OFF'}"
 
     UI_FONT = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(header, "Intel RealSense D405: Left Imager RGB (1280x720)", (14, 25), UI_FONT, 0.44, (220, 220, 220), 1)

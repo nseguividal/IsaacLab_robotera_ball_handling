@@ -1,18 +1,16 @@
 # Copyright (c) 2022-2026, Robotera Isaac Lab Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""MDP module exports for ball rotation."""
+"""MDP module exports for the ball rotation task.
 
-from .observations import dual_ball_state, visuo_tactile_force_array_obs, visuo_tactile_total_forces_obs
-from .rewards import dual_ball_containment, dual_ball_proximity, dual_ball_rotation_velocity
-from .terminations import ball_dropped
+What goes here:
+- Re-export custom functions from `observations.py`, `rewards.py`, and
+  `terminations.py` so `ball_rotation_env_cfg.py` can reference them via `mdp.<name>`.
+"""
 
-__all__ = [
-    "dual_ball_rotation_velocity",
-    "dual_ball_containment",
-    "dual_ball_proximity",
-    "ball_dropped",
-    "dual_ball_state",
-    "visuo_tactile_force_array_obs",
-    "visuo_tactile_total_forces_obs",
-]
+# TODO: Import and expose custom MDP terms once implemented:
+# from .observations import ...
+# from .rewards import ...
+# from .terminations import ...
+
+__all__: list[str] = []

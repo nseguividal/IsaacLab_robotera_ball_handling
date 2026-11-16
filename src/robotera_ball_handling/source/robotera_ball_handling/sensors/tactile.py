@@ -13,7 +13,7 @@ from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
 # ==============================================================================
 # Optical Visuo-Tactile Sensor Array (5 Fingertips - 12x10 Grid with 270° Encirclement)
 # ==============================================================================
-# Modeled after the physical Robotera XHand tactile skin:
+# Modeled after the Robotera XHand tactile sensor:
 # - 12 rows (along longitudinal finger length) x 10 columns (along 270° circumferential wrap)
 # - Wide horizontal aperture (3.8) to simulate the 270° cylindrical encirclement around the pad
 # - Micro-optical sensing on all 5 fingertips (Thumb, Index, Middle, Ring, Pinky)
@@ -44,12 +44,11 @@ VISUO_TACTILE_FINGERTIPS_CFG = TiledCameraCfg(
 # ==============================================================================
 # Fingertip Contact Force & Pressure Reporter (Physics Sensor)
 # ==============================================================================
-# Complements the visuo-tactile camera by providing direct 3D contact force vectors
-# (Fx, Fy, Fz) and normal force magnitudes for reward calculation and physics analysis.
+# Used just to check if the fingertip is in contact with an object, to debug the image of the visuotactile sensor
 # ==============================================================================
 
 FINGERTIP_CONTACT_SENSOR_CFG = ContactSensorCfg(
-    prim_path="{ENV_REGEX_NS}/Robot/right_hand_.*_link2",
+    prim_path="{ENV_REGEX_NS}/Robot/right_hand_.*_link2",           # fingertip link
     history_length=3,
     update_period=0.0,
     track_air_time=False,
@@ -62,8 +61,8 @@ FINGERTIP_CONTACT_SENSOR_CFG = ContactSensorCfg(
 # ==============================================================================
 def compute_visuo_tactile_force_array(
     tactile_depth: torch.Tensor,
-    contact_threshold: float = 0.003,  # 3mm contact zone threshold (last 3mm as elastomer gel)
-    gel_stiffness: float = 80.0,       # Realistic N/m elasticity scaling
+    contact_threshold: float = 0.003,  # 3mm contact zone threshold (3mm as elastomer gel)
+    gel_stiffness: float = 80.0,       # N/m elasticity scaling
     output_taxels: tuple[int, int] = (12, 10),  # 12 rows x 10 cols grid (270° encirclement)
     contact_forces: torch.Tensor | None = None,
 ) -> torch.Tensor:

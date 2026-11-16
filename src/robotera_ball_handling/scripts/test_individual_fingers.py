@@ -110,24 +110,6 @@ def get_clean_finger_name(body_name: str) -> str:
     return body_name
 
 
-def render_ascii_taxel_map(force_matrix: torch.Tensor, threshold: float = 0.01) -> str:
-    lines = []
-    has_contact = (force_matrix.max().item() > threshold)
-    num_rows, num_cols = force_matrix.shape
-    if not has_contact:
-        for _ in range(num_rows):
-            lines.append("       " + "# " * num_cols)
-        return "\n".join(lines) + "\n       (Pad in open air / no contact)"
-
-    for r in range(num_rows):
-        row_str = "       "
-        for c in range(num_cols):
-            val = force_matrix[r, c].item()
-            row_str += "* " if val > threshold else "# "
-        lines.append(row_str)
-    return "\n".join(lines)
-
-
 def run_finger_diagnostic(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     sim_dt = sim.get_physics_dt()
     robot: Articulation = scene["robot"]
@@ -202,28 +184,14 @@ def run_finger_diagnostic(sim: sim_utils.SimulationContext, scene: InteractiveSc
 
             t_forces = total_forces.view(-1)
             p_forces = physics_contact.view(-1)
-            f_array = force_array.view(5, 12, 10)
-
             print(f"\n--- [Step {step:05d} | Actively Wiggling: >>> {active_finger_name.upper()} <<<] ---")
             for i, d_name in enumerate(finger_display_names):
                 f_val = t_forces[i].item()
                 p_val = p_forces[i].item()
                 is_active = (d_name == active_finger_name)
-                marker = "👉" if is_active else "  "
-                state = f"🟢 IN CONTACT (Tactile: {f_val:.3f} N | Newton: {p_val:.3f} N)" if (f_val > 0.01 or p_val > 0.01) else "⚪ In Air (0.000 N)"
+                marker = "-->" if is_active else "  "
+                state = f"IN CONTACT (Tactile: {f_val:.3f} N | Newton: {p_val:.3f} N)" if (f_val > 0.01 or p_val > 0.01) else "In Air (0.000 N)"
                 print(f" {marker} [Sensor Index {i}] {d_name:6s}: {state}")
-
-            # Show ASCII tactile map for the currently active finger's sensor index
-            # Find sensor index for active finger
-            active_sensor_idx = None
-            for idx, name in enumerate(finger_display_names):
-                if name == active_finger_name:
-                    active_sensor_idx = idx
-                    break
-
-            if active_sensor_idx is not None:
-                print(f"\n   [12x10 Tactile Map for Active Finger: {active_finger_name} (Sensor Index {active_sensor_idx})]:")
-                print(render_ascii_taxel_map(f_array[active_sensor_idx], threshold=0.01))
             print("-" * 80)
 
 

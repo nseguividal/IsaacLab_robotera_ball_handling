@@ -45,6 +45,14 @@ datasets/
 *.usdc
 *.log
 
+# Allow documentation & README assets
+!**/assets/*.png
+!**/assets/*.jpg
+!**/assets/*.jpeg
+
+# Nested repositories
+src/Catching_ball_RL/
+
 # Environments & IDEs
 .env
 .venv

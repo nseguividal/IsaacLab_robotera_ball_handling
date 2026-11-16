@@ -1,99 +1,105 @@
 # UFactory uf850 + Robotera XHand Manipulation (Isaac Lab)
 
-NVIDIA Isaac Lab simulation and reinforcement learning platform combining the **UFactory uf850 (6-DoF Robotic Arm)** with the **Robotera XHand (12-DoF Dexterous Hand)** into a unified 18-DoF manipulation system on a tabletop workspace.
+Simulation for dexterous in-hand manipulation combining the **UFactory uf850 (6-DoF arm)** with the **Robotera XHand (12-DoF dexterous hand)** in NVIDIA Isaac Lab.
 
-## Git Branches
-
-- **`ufactory-arm-and-hand`** *(this branch)*: UFactory uf850 arm bolted to the table with Robotera XHand palm mounted directly to the tool flange (18 active DoFs unified articulation).
-- **`hand-ball-handling`**: Standalone hand platform focused on in-hand dual-ball (Baoding) continuous rotation.
-
----
-
-## Features
-
-- **Unified Articulation (18 DoFs)**:
-  - **UFactory uf850 Arm**: 6 revolute joints (`joint1` to `joint6`) with high-stiffness control ($K_p=800$, $K_d=60$).
-  - **Robotera XHand**: 12 compliant finger joints ($K_p=15$, $K_d=0.5$). Redundant wrist pitch/roll joints are removed so the palm base plate (`right_hand_base_link`) bolts flush directly to the arm flange (`link6`).
-  - **Table Mounting**: Arm base bolted firmly at `pos=(-0.10, 0.0, 0.32)` on top of the oak table surface.
-- **Sensors & Perception**:
-  - **RealSense D405**: Wrist macro RGB-D camera with physical stereo noise modeling (stereo parallax occlusion, edge flicker, low-contrast dropouts, and spatial filtering).
-  - **RealSense D435**: Static overview POV RGB-D camera.
-  - **Visuo-Tactile Sensors**: 5x $(12 \times 10)$ taxel arrays (120 taxels per finger, 600 total) with 270° lateral pad encirclement and Maxwell viscoelastic creep relaxation.
-  - **PhysX Contact Sensors**: 3D contact force vectors and normal forces on fingertips.
-- **Sim-to-Real Features**:
-  - Hardware bus latency queue (33.3 ms delay).
-  - Domain randomization: object mass, surface friction, actuator gains, and pose perturbations.
+> [!NOTE]
+> **RealSense Camera Visualization**: To view the real-world Intel RealSense camera, ensure it is plugged into a **USB 3.0** port on the PC, then run:
+> ```bash
+> realsense-viewer
+> ```
 
 ---
 
-## Setup & Installation
+## Quick Setup
 
-1. Activate your Isaac Lab conda environment:
+Activate your Isaac Lab environment and install the package in editable mode:
+
 ```bash
+# 1. Activate conda environment
 conda activate isaaclab
-```
 
-2. Install the `robotera_ball_handling` package in editable mode:
-```bash
+# 2. Install local package
 pip install -e src/robotera_ball_handling
 ```
 
 ---
 
-## How to Run
+## Commands & Execution Examples
 
-Run commands from the repository root (`isaaclab_projects`):
+Run all commands from the repository root (`isaaclab_projects/`).
 
-### 1. Test Arm + Hand Coordination on Table
-Interactive simulation verifying arm reach over the table and coordinated finger grasping with live telemetry:
-```bash
-python src/robotera_ball_handling/scripts/test_arm_hand.py --enable_cameras
-```
+### 1. Tactile Grasp & Multi-Modal HUD
 
-### 2. Test Tactile Grasp & 12x10 Pressure HUD
-Interactive simulation displaying the live OpenCV tactile pressure matrix HUD (12x10 grid per finger) and RealSense camera view:
+Tests dynamic hand grasping on a static ball. Displays a live OpenCV dashboard with **5 fingertip visuo-tactile heatmaps (12×10 taxel grids)** and the **Intel RealSense D405 macro depth camera with realistic stereo noise** (dropouts, occlusion shadows, edge flicker).
+
 ```bash
 python src/robotera_ball_handling/scripts/test_tactile_grasp.py --enable_cameras
 ```
 
-### 3. Individual Finger Motion Diagnostic
-Verifies joint motion and tactile sensor readouts on each finger sequentially:
-```bash
-python src/robotera_ball_handling/scripts/test_individual_fingers.py --enable_cameras
-```
+---
 
-### 4. Train RL Policy (RSL-RL PPO)
-Launch headless reinforcement learning training:
-```bash
-python src/robotera_ball_handling/scripts/rsl_rl/train.py --headless --num_envs 64
-```
+### 2. Arm + Hand Coordinated Movement on Table
 
-### 5. Play Trained Policy
-Visualize and evaluate a trained policy checkpoint:
+Tests the complete **18-DoF unified robot** (6-DoF UFactory arm + 12-DoF wristless XHand) mounted on top of the table. Right now its just hardcoded movements.
+
 ```bash
-python src/robotera_ball_handling/scripts/rsl_rl/play.py --num_envs 16
+# Standard run with live D405 wrist camera window
+python src/robotera_ball_handling/scripts/test_arm_hand.py --enable_cameras
 ```
 
 ---
 
-## Repository Structure
+### 3. Individual Finger Diagnostic
 
+Diagnostic sequence to verify joint directions, tendon limits, and PhysX sensor index mappings. Flexes and extends each physical finger for 3 seconds in order:
+
+```bash
+python src/robotera_ball_handling/scripts/test_individual_fingers.py --enable_cameras
 ```
-isaaclab_projects/
-├── README.md               # guide with all the execution commands
-├── Information.md          # documentation on the sim-to-real physics parameters & sensor tuning
-└── src/robotera_ball_handling/
-    ├── scripts/            # executable scripts & RL stuff
-    │   ├── test_arm_hand.py        # UFactory arm + hand on table test
-    │   ├── test_tactile_grasp.py   # visuotactile sensors + wrist depth camera with noise (robotera)
-    │   ├── test_individual_fingers.py  # hardcoded sequence of fingers moving
-    │   └── rsl_rl/                 # PPO train and play scripts
-    └── source/robotera_ball_handling/
-        ├── assets/         # robot URDFs, USD references, and 3D STL meshes
-        │   └── robots/xhand/urdf/  # robotera hand urdf
-        ├── robots/         # articulation definitions (ufactory_xhand.py, robotera_xhand.py)
-        ├── sensors/        # sensor definitions: visuotactile & cameras
-        ├── tasks/          # RL environments (MDP rewards, observations)
-        └── scene_config.py # scene setup: table, room, robots, lightning 
+
+---
+
+### 4. Reinforcement Learning (NOT IMPLEMENTED YET, just template)
+
+Starter templates for training and evaluating reinforcement learning policies on the in-hand ball rotation task:
+
+```bash
+# Launch training headless (template)
+python src/robotera_ball_handling/scripts/rsl_rl/train.py --headless --num_envs 64 --max_iterations 3000
+
+# Visualize trained policy checkpoint (template)
+python src/robotera_ball_handling/scripts/rsl_rl/play.py --num_envs 1 --checkpoint /path/to/model.pt
 ```
+
+---
+
+## Common CLI Options
+
+| Flag | Description |
+| :--- | :--- |
+| `--enable_cameras` | Enables rendering for tactile cameras and RealSense wrist/overview cameras |
+| `--headless` | Runs simulation without opening the Isaac Sim 3D GUI window (faster, ideal for training) |
+| `--device cuda:0` | Selects compute device (`cuda:0`, `cuda:1`, or `cpu`) |
+| `--num_envs <N>` | Number of parallel simulation environments to spawn (e.g. `64`) |
+
+---
+
+## Visuals & Comparison
+
+### Real hand view RealSense Camera
+![Real Hand](src/robotera_ball_handling/assets/real-hand.png)
+
+### Real Robotera hand view with a ball
+![Robotera with Ball](src/robotera_ball_handling/assets/robotera-ball.png)
+
+### Real Robotera hand view without hand
+![Robotera without Ball](src/robotera_ball_handling/assets/robotera-noball.png)
+
+### Depth camera simulation (with NO smoothing filter added)
+DEFAULT_ENABLE_SPATIAL_FILTER = False
+![Non-Smooth Simulation](src/robotera_ball_handling/assets/non-smoothsimulation.png)
+
+### Depth camera simulation (with smoothing filter added)
+DEFAULT_ENABLE_SPATIAL_FILTER = True
+![Smooth Simulation](src/robotera_ball_handling/assets/smoothsimulation.png)
 

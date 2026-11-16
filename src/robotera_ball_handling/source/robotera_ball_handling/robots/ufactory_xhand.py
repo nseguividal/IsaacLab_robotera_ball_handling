@@ -4,7 +4,7 @@
 """Configuration for the UFactory uf850 arm combined with the Robotera XHand dexterous hand."""
 
 import os
-from pxr import Gf, Sdf, UsdPhysics
+from pxr import Gf, PhysxSchema, Sdf, UsdPhysics
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -25,6 +25,7 @@ ROBOTERA_XHAND_RIGHT_WRISTLESS_URDF = os.path.join(
 )
 
 # UFactory uf850 USD Asset Path in Isaac Sim / Nucleus
+# comes from http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/<Version>/Robots/Ufactory/uf850/uf850.usd
 UFACTORY_UF850_USD = f"{ISAAC_NUCLEUS_DIR}/Robots/Ufactory/uf850/uf850.usd"
 
 
@@ -64,33 +65,9 @@ def spawn_ufactory_uf850_xhand(
     )
     stage = arm_prim.GetStage()
     resolved_arm_path = str(arm_prim.GetPath())
+    flange_path = f"{resolved_arm_path}/link6"
 
-    # 2. Locate arm flange link in the arm USD before spawning the hand
-    flange_prim = None
-    flange_candidates = ["link6", "link_eef", "tool0", "flange", "link_tool"]
-    for p in stage.Traverse():
-        path_str = str(p.GetPath())
-        if path_str.startswith(resolved_arm_path):
-            if p.GetName() in flange_candidates:
-                flange_prim = p
-                break
-    if flange_prim is None:
-        for cand in flange_candidates:
-            test_p = stage.GetPrimAtPath(f"{resolved_arm_path}/{cand}")
-            if test_p.IsValid():
-                flange_prim = test_p
-                break
-    if flange_prim is None:
-        available_prims = [
-            p.GetName() for p in stage.Traverse() if str(p.GetPath()).startswith(resolved_arm_path)
-        ]
-        raise RuntimeError(
-            f"Could not locate flange link in UFactory uf850 arm. Available prims: {available_prims}"
-        )
-    flange_path = str(flange_prim.GetPath())
-    print(f"[INFO] Located UFactory uf850 tool flange at: {flange_path}")
-
-    # 3. Spawn Robotera XHand from URDF under resolved_arm_path/xhand (Wristless palm version)
+    # 2. Spawn Robotera XHand from URDF under resolved_arm_path/xhand (Wristless palm version)
     hand_prim_path = f"{resolved_arm_path}/xhand"
     hand_urdf_cfg = sim_utils.UrdfFileCfg(
         asset_path=ROBOTERA_XHAND_RIGHT_WRISTLESS_URDF,
@@ -120,48 +97,14 @@ def spawn_ufactory_uf850_xhand(
         orientation=(0.0, 1.0, 0.0, 0.0),
     )
     resolved_hand_path = str(hand_prim.GetPath())
+    mount_link_path = f"{resolved_hand_path}/right_hand_base_link"
 
-    # 4. Locate palm root mount link in the hand prim
-    mount_link_prim = None
-    mount_candidates = ["right_hand_base_link", "right_hand_link"]
-    for p in stage.Traverse():
-        path_str = str(p.GetPath())
-        if path_str.startswith(resolved_hand_path):
-            if p.GetName() in mount_candidates:
-                mount_link_prim = p
-                break
-    if mount_link_prim is None:
-        for cand in mount_candidates:
-            test_p = stage.GetPrimAtPath(f"{resolved_hand_path}/{cand}")
-            if test_p.IsValid():
-                mount_link_prim = test_p
-                break
-    if mount_link_prim is None:
-        raise RuntimeError(f"Could not locate palm mount link in Robotera XHand under: {resolved_hand_path}")
-    mount_link_path = str(mount_link_prim.GetPath())
-    print(f"[INFO] Located Robotera XHand palm mount link at: {mount_link_path}")
+    # 3. Strip articulation root APIs from the hand mount link so the arm + hand forms a single articulation
+    mount_prim = stage.GetPrimAtPath(mount_link_path)
+    mount_prim.RemoveAPI(UsdPhysics.ArticulationRootAPI)
+    mount_prim.RemoveAPI(PhysxSchema.PhysxArticulationAPI)
 
-    # 5. Strip ArticulationRootAPI from the hand prims so the arm + hand forms a single articulation
-    for p in stage.Traverse():
-        path_str = str(p.GetPath())
-        if path_str.startswith(resolved_hand_path):
-            if p.HasAPI(UsdPhysics.ArticulationRootAPI):
-                p.RemoveAPI(UsdPhysics.ArticulationRootAPI)
-                print(f"[INFO] Removed UsdPhysics.ArticulationRootAPI from {path_str}")
-            try:
-                p.RemoveAPI("PhysicsArticulationRootAPI")
-            except Exception:
-                pass
-            try:
-                from pxr import PhysxSchema
-                if p.HasAPI(PhysxSchema.PhysxArticulationRootAPI):
-                    p.RemoveAPI(PhysxSchema.PhysxArticulationRootAPI)
-                    print(f"[INFO] Removed PhysxSchema.PhysxArticulationRootAPI from {path_str}")
-                p.RemoveAPI("PhysxArticulationRootAPI")
-            except Exception:
-                pass
-
-    # 6. Create PhysX Fixed Joint binding arm flange directly to palm mount link
+    # 4. Create PhysX Fixed Joint binding arm flange directly to palm mount link
     joint_prim_path = f"{flange_path}/flange_to_palm_fixed_joint"
     fixed_joint = UsdPhysics.FixedJoint.Define(stage, Sdf.Path(joint_prim_path))
     fixed_joint.CreateBody0Rel().SetTargets([Sdf.Path(flange_path)])

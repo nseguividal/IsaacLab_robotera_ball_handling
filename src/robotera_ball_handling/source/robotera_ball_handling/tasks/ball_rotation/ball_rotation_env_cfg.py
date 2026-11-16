@@ -1,169 +1,61 @@
 # Copyright (c) 2022-2026, Robotera Isaac Lab Project.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Configuration for the Robotera Hand Dual-Ball Rotation environment."""
+"""Environment configuration template for the ball rotation task.
 
-import isaaclab.envs.mdp as isaac_mdp
-import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
+What goes here:
+1. `RoboteraBallRotationSceneCfg`: Ground, lights, robot, task objects (e.g. balls),
+   and sensors (cameras, contact sensors, tactile sensors).
+2. `ActionsCfg`: Action terms mapping policy outputs to robot joint/actuator targets.
+3. `ObservationsCfg`: Policy (and optional critic) observation groups/terms.
+4. `RewardsCfg`: Reward terms and weights shaping the desired behavior.
+5. `TerminationsCfg`: Episode timeout and failure/drop termination conditions.
+6. `EventCfg`: Reset logic and domain randomization (mass, friction, actuator gains, etc.).
+7. `RoboteraBallRotationEnvCfg`: Top-level `ManagerBasedRLEnvCfg` tying all sections
+   together with simulation timestep (`dt`), `decimation`, and physics settings.
+"""
+
 from isaaclab.envs import ManagerBasedRLEnvCfg
-from isaaclab.managers import ActionTermCfg as ActionTerm
-from isaaclab.managers import EventTermCfg as EventTerm
-from isaaclab.managers import ObservationGroupCfg as ObsGroup
-from isaaclab.managers import ObservationTermCfg as ObsTerm
-from isaaclab.managers import RewardTermCfg as RewTerm
-from isaaclab.managers import SceneEntityCfg
-from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, TiledCameraCfg
-from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 
-# Sensor & Robot configs
-from robotera_ball_handling.robots import ROBOTERA_XHAND_RIGHT_CFG
-from robotera_ball_handling.sensors import (
-    FINGERTIP_CONTACT_SENSOR_CFG,
-    REALSENSE_D405_WRIST_CFG,
-    REALSENSE_D435_OVERVIEW_CFG,
-    VISUO_TACTILE_FINGERTIPS_CFG,
-)
-
-# Task MDP components
-from . import mdp
+# TODO: Import robot/sensor configs and custom MDP terms when implementing the task.
+# from robotera_ball_handling.robots import ...
+# from robotera_ball_handling.sensors import ...
+# from . import mdp
 
 
 # ==============================================================================
-# 1. Scene Configuration with Contact Physics & Multi-Sensory Array
+# 1. Scene Configuration
 # ==============================================================================
 @configclass
 class RoboteraBallRotationSceneCfg(InteractiveSceneCfg):
-    """Scene definition with hand, 2 balls, cameras, and tactile sensors."""
+    """Scene entities: ground, lighting, robot, objects, and sensors."""
 
-    # Ground Plane
-    ground = AssetBaseCfg(
-        prim_path="/World/defaultGroundPlane",
-        spawn=sim_utils.GroundPlaneCfg(),
-    )
-
-    # Lighting
-    dome_light = AssetBaseCfg(
-        prim_path="/World/Light",
-        spawn=sim_utils.DomeLightCfg(
-            intensity=2500.0,
-            color=(0.95, 0.95, 0.95),
-        ),
-    )
-
-    # Robotera XHand (Right)
-    robot: ArticulationCfg = ROBOTERA_XHAND_RIGHT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-
-    # Ball 1 (Red manipulation sphere - radius 24mm, mass 50g)
-    ball1: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Ball1",
-        spawn=sim_utils.SphereCfg(
-            radius=0.024,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=False,
-                max_depenetration_velocity=5.0,
-            ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.9, 0.2, 0.2), roughness=0.3),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.85,
-                dynamic_friction=0.70,
-                restitution=0.05,
-            ),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.080, -0.022, 0.440),
-        ),
-    )
-
-    # Ball 2 (Blue manipulation sphere - radius 24mm, mass 50g)
-    ball2: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Ball2",
-        spawn=sim_utils.SphereCfg(
-            radius=0.024,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=False,
-                max_depenetration_velocity=5.0,
-            ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.4, 0.9), roughness=0.3),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.85,
-                dynamic_friction=0.70,
-                restitution=0.05,
-            ),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.080, 0.022, 0.440),
-        ),
-    )
-
-    # Multi-Modal Sensors
-    wrist_camera: TiledCameraCfg = REALSENSE_D405_WRIST_CFG
-    overview_camera: TiledCameraCfg = REALSENSE_D435_OVERVIEW_CFG
-    tactile_cameras: TiledCameraCfg = VISUO_TACTILE_FINGERTIPS_CFG
-    contact_forces: ContactSensorCfg = FINGERTIP_CONTACT_SENSOR_CFG
+    # TODO: Add ground, dome_light, robot, manipulation objects, and sensors.
+    pass
 
 
 # ==============================================================================
-# 2. Action Configuration (12-DoF Joint Position Setpoints)
+# 2. Action Configuration
 # ==============================================================================
 @configclass
 class ActionsCfg:
-    """Action spaces for finger joint position targets."""
+    """Action space definitions (e.g., joint position targets)."""
 
-    finger_positions = ActionTerm(
-        class_type=isaac_mdp.JointPositionAction,
-        asset_name="robot",
-        joint_names=["right_hand_.*_joint.*"],
-        scale=0.25,
-        use_default_offset=True,
-    )
+    # TODO: Add ActionTermCfg fields.
+    pass
 
 
 # ==============================================================================
-# 3. Observation Configuration (Proprioception + Tactile + Goal)
+# 3. Observation Configuration
 # ==============================================================================
 @configclass
 class ObservationsCfg:
-    """Observation spaces for RL policy."""
+    """Observation groups and terms fed to the RL policy."""
 
-    @configclass
-    class PolicyCfg(ObsGroup):
-        """Observations fed to the actor-critic network."""
-
-        # Hand proprioception
-        joint_pos = ObsTerm(func=isaac_mdp.joint_pos_rel, params={"asset_cfg": SceneEntityCfg("robot")})
-        joint_vel = ObsTerm(func=isaac_mdp.joint_vel_rel, params={"asset_cfg": SceneEntityCfg("robot")})
-
-        # Dual ball 6D states relative to palm
-        ball_state = ObsTerm(func=mdp.dual_ball_state)
-
-        # Fingertip contact force magnitudes (physics engine)
-        contact_forces = ObsTerm(
-            func=isaac_mdp.contact_sensor_net_force,
-            params={"sensor_cfg": SceneEntityCfg("contact_forces")},
-        )
-
-        # Visuo-tactile 5-fingertip force array (optical gel deformation to 12x10 force matrix, 270° encirclement)
-        visuo_tactile_forces = ObsTerm(
-            func=mdp.visuo_tactile_force_array_obs,
-            params={"sensor_name": "tactile_cameras", "taxels": (12, 10)},
-        )
-
-        # Actions history
-        last_action = ObsTerm(func=isaac_mdp.last_action)
-
-        def __post_init__(self):
-            self.enable_corruption = True
-            self.concatenate_terms = True
-
-    policy: PolicyCfg = PolicyCfg()
+    # TODO: Define PolicyCfg(ObsGroup) with ObsTerm fields.
+    pass
 
 
 # ==============================================================================
@@ -171,41 +63,10 @@ class ObservationsCfg:
 # ==============================================================================
 @configclass
 class RewardsCfg:
-    """Reward terms encouraging continuous dual-ball rotation."""
+    """Reward terms and weights."""
 
-    # Primary Task: Rotate the two balls around each other (target: 1.5 rad/s)
-    rotation_velocity = RewTerm(
-        func=mdp.dual_ball_rotation_velocity,
-        weight=2.5,
-        params={"target_velocity": 1.5},
-    )
-
-    # Secondary: Keep balls centered in the palm cradle
-    containment = RewTerm(
-        func=mdp.dual_ball_containment,
-        weight=1.0,
-        params={"std": 0.05},
-    )
-
-    # Keep the two balls in proximity
-    proximity = RewTerm(
-        func=mdp.dual_ball_proximity,
-        weight=0.5,
-        params={"std": 0.02},
-    )
-
-    # Penalize jerky high-frequency joint actions
-    action_rate = RewTerm(
-        func=isaac_mdp.action_rate_l2,
-        weight=-0.01,
-    )
-
-    # Penalize excessive joint velocities
-    joint_vel = RewTerm(
-        func=isaac_mdp.joint_vel_l2,
-        weight=-0.001,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
+    # TODO: Add RewTerm fields using isaaclab.envs.mdp or local `mdp` functions.
+    pass
 
 
 # ==============================================================================
@@ -213,103 +74,31 @@ class RewardsCfg:
 # ==============================================================================
 @configclass
 class TerminationsCfg:
-    """Termination conditions."""
+    """Episode termination conditions (timeouts, drops, out-of-bounds)."""
 
-    time_out = DoneTerm(func=isaac_mdp.time_out, time_out=True)
-
-    ball_drop = DoneTerm(
-        func=mdp.ball_dropped,
-        params={"min_height": 0.32, "max_dist_from_palm": 0.12},
-    )
+    # TODO: Add DoneTerm fields.
+    pass
 
 
 # ==============================================================================
-# 6. Domain Randomization & Events Configuration (Sim-to-Real Item 5)
+# 6. Events & Domain Randomization Configuration
 # ==============================================================================
 @configclass
 class EventCfg:
-    """Domain randomization terms for robust sim-to-real policy transfer."""
+    """Startup/reset events and domain randomization terms."""
 
-    # 1. Reset scene objects & hand joints on episode reset
-    reset_robot_joints = EventTerm(
-        func=isaac_mdp.reset_joints_by_scale,
-        mode="reset",
-        params={
-            "position_range": (0.9, 1.1),
-            "velocity_range": (0.0, 0.0),
-            "asset_cfg": SceneEntityCfg("robot"),
-        },
-    )
-
-    # 2. Randomize Object / Ball Mass (Sim-to-Real Item 5.1: 50g nominal +/- 30% -> 35g to 65g)
-    randomize_ball1_mass = EventTerm(
-        func=isaac_mdp.randomize_rigid_body_mass,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("ball1"),
-            "mass_distribution_params": (0.035, 0.065),
-            "operation": "abs",
-        },
-    )
-    randomize_ball2_mass = EventTerm(
-        func=isaac_mdp.randomize_rigid_body_mass,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("ball2"),
-            "mass_distribution_params": (0.035, 0.065),
-            "operation": "abs",
-        },
-    )
-
-    # 3. Randomize Friction between Object and Fingers (Sim-to-Real Item 5.2)
-    randomize_ball1_material = EventTerm(
-        func=isaac_mdp.randomize_rigid_body_material,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("ball1"),
-            "static_friction_range": (0.50, 1.20),
-            "dynamic_friction_range": (0.40, 1.00),
-            "restitution_range": (0.0, 0.08),
-            "num_buckets": 32,
-        },
-    )
-    randomize_ball2_material = EventTerm(
-        func=isaac_mdp.randomize_rigid_body_material,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("ball2"),
-            "static_friction_range": (0.50, 1.20),
-            "dynamic_friction_range": (0.40, 1.00),
-            "restitution_range": (0.0, 0.08),
-            "num_buckets": 32,
-        },
-    )
-
-    # 4. Actuator Gain Randomization & Motor Jitter (Sim-to-Real Item 5.4: P-gain & D-gain +/- 15%)
-    randomize_actuator_gains = EventTerm(
-        func=isaac_mdp.randomize_actuator_gains,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "stiffness_distribution_params": (0.85, 1.15),
-            "damping_distribution_params": (0.85, 1.15),
-            "operation": "scale",
-            "distribution": "uniform",
-        },
-    )
+    # TODO: Add EventTerm fields.
+    pass
 
 
 # ==============================================================================
-# 7. Complete Environment Configuration with Newton Physics
+# 7. Top-Level Environment Configuration
 # ==============================================================================
 @configclass
 class RoboteraBallRotationEnvCfg(ManagerBasedRLEnvCfg):
-    """Complete environment configuration for Robotera Ball Handling."""
+    """Complete ManagerBasedRLEnvCfg for the ball rotation task."""
 
-    # Scene & Entities
     scene: RoboteraBallRotationSceneCfg = RoboteraBallRotationSceneCfg(num_envs=64, env_spacing=2.5)
-
-    # MDP Components
     actions: ActionsCfg = ActionsCfg()
     observations: ObservationsCfg = ObservationsCfg()
     rewards: RewardsCfg = RewardsCfg()
@@ -317,31 +106,6 @@ class RoboteraBallRotationEnvCfg(ManagerBasedRLEnvCfg):
     events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        """Configure simulation timestep and Newton / GPU Contact Physics engine."""
-        # General simulation parameters
-        self.decimation = 2  # Policy runs at 30 Hz (physics at 60 Hz)
-        self.episode_length_s = 15.0
-
-        # Simulation Physics Setup with Newton / TGS Contact Physics
-        self.sim = SimulationCfg(
-            dt=1.0 / 60.0,
-            render_interval=self.decimation,
-            physx=sim_utils.PhysxCfg(
-                solver_type=1,  # TGS (Temporal Gauss-Seidel / Newton-Raphson nonlinear solver)
-                solve_articulation_contact_last=True,  # Prioritize dynamic contact resolution for dexterous in-hand manipulation
-                min_position_iteration_count=8,
-                max_position_iteration_count=32,
-                min_velocity_iteration_count=4,
-                max_velocity_iteration_count=16,
-                enable_external_forces_every_iteration=True,
-                friction_offset_threshold=0.01,
-                friction_correlation_distance=0.005,
-            ),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.85,
-                dynamic_friction=0.70,
-                restitution=0.05,
-                compliant_contact_stiffness=2000.0,
-                compliant_contact_damping=50.0,
-            ),
-        )
+        """Configure simulation dt, decimation, episode length, and physics."""
+        # TODO: Set self.decimation, self.episode_length_s, and self.sim (SimulationCfg).
+        pass
